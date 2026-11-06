@@ -124,7 +124,6 @@ export type PlannerAction =
   | { type: 'layout/setStyle'; style: LayoutStyleId }
   | { type: 'layout/setGap'; gapIn: number }
   | { type: 'layout/setGapUnit'; unit: GapUnit }
-  | { type: 'layout/setVariant'; variant: number }
   | { type: 'layout/regenerate'; seed?: number }
   | { type: 'layout/redesign'; seed?: number }
   | { type: 'layout/apply'; style: LayoutStyleId; variant: number }
@@ -190,15 +189,6 @@ export function plannerReducer(state: PlannerState, action: PlannerAction): Plan
       }
     case 'layout/setGapUnit':
       return { ...state, layout: { ...state.layout, gapUnit: action.unit } }
-    case 'layout/setVariant':
-      if (!isFiniteNumber(action.variant)) return state
-      return {
-        ...state,
-        layout: {
-          ...state.layout,
-          variant: ((action.variant % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT,
-        },
-      }
     case 'layout/regenerate':
       return { ...state, layout: { ...state.layout, seed: action.seed ?? newSeed() } }
     case 'layout/redesign': {
@@ -251,15 +241,22 @@ export function plannerReducer(state: PlannerState, action: PlannerAction): Plan
       return patch.sizeId || patch.orientation ? { ...next, templateId: null } : next
     }
     case 'frames/updateMount': {
-      const { colourId, marginIn } = action.patch
-      if (colourId && !exists(MOUNT_COLOURS, colourId)) return state
-      const safeMargin =
-        marginIn === undefined || !isFiniteNumber(marginIn)
-          ? undefined
-          : clamp(marginIn, PLANNER_RULES.matIn.min, PLANNER_RULES.matIn.max)
+      // Each field is validated and set explicitly (never spread from the patch), so an invalid value
+      // (NaN margin, unknown colour, non-boolean flag) can't reach state: the action is ignored instead.
+      const { enabled, colourId, marginIn } = action.patch
+      if (enabled !== undefined && typeof enabled !== 'boolean') return state
+      if (colourId !== undefined && !exists(MOUNT_COLOURS, colourId)) return state
+      if (marginIn !== undefined && !isFiniteNumber(marginIn)) return state
       return patchFrame(state, action.index, (f) => ({
         ...f,
-        mount: { ...f.mount, ...action.patch, ...(safeMargin === undefined ? {} : { marginIn: safeMargin }) },
+        mount: {
+          enabled: enabled ?? f.mount.enabled,
+          colourId: colourId ?? f.mount.colourId,
+          marginIn:
+            marginIn === undefined
+              ? f.mount.marginIn
+              : clamp(marginIn, PLANNER_RULES.matIn.min, PLANNER_RULES.matIn.max),
+        },
       }))
     }
     case 'frames/applyToAll': {

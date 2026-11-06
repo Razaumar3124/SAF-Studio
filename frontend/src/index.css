@@ -149,13 +149,8 @@
       --auth-form-gap: 0.75rem;
     }
   }
-  /* Mouse / trackpad laptops only: input text 15px. Touch screens ≥ 1024px (iPad landscape) keep 16px,
-     because iOS Safari zooms the page on focusing smaller input text. */
-  @media (min-width: 64rem) and ((max-width: 96rem) or (max-height: 50rem)) and (pointer: fine) {
-    [data-auth] {
-      --field-text: 0.9375rem;
-    }
-  }
+  /* Input text stays 16px here (touch screens ≥ 1024px, e.g. iPad landscape: iOS Safari zooms the page on
+     focusing smaller input text). Mouse / trackpad screens get 15px from SCALED DESKTOP AUTH below. */
 
   /*
    * REGISTER (5 fields + password hint): fits the viewport with no scroll from ~600px tall up.
@@ -194,15 +189,10 @@
     --auth-section-gap: clamp(0.375rem, 2.9167dvh - 11.5px, 1.25rem); /* 6 → 20 */
     --auth-form-gap: clamp(0.4375rem, 1.875dvh - 4.25px, 1rem); /* 7 → 16 */
   }
-  /* Register on laptops: the same 26rem card cap and 15px mouse-only input text as Login. */
+  /* Register on laptops: the same 26rem card cap as Login (mouse screens: see SCALED DESKTOP AUTH). */
   @media (min-width: 64rem) and ((max-width: 96rem) or (max-height: 50rem)) {
     [data-auth][data-compact] {
       --auth-card-max: 26rem;
-    }
-  }
-  @media (min-width: 64rem) and ((max-width: 96rem) or (max-height: 50rem)) and (pointer: fine) {
-    [data-auth][data-compact] {
-      --field-text: 0.9375rem;
     }
   }
 

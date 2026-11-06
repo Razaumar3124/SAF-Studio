@@ -15,10 +15,14 @@ export type UploadResult =
  */
 export function usePhotoUpload() {
   const urls = useRef(new Set<string>())
+  // False after unmount: a decode that finishes later must not register (and so leak) its URL.
+  const mounted = useRef(true)
 
   useEffect(() => {
     const set = urls.current
+    mounted.current = true // StrictMode re-runs effects after a simulated unmount
     return () => {
+      mounted.current = false
       set.forEach((u) => URL.revokeObjectURL(u))
       set.clear()
     }
@@ -39,6 +43,11 @@ export function usePhotoUpload() {
       if (Math.min(img.naturalWidth, img.naturalHeight) < MIN_SIDE_PX) {
         URL.revokeObjectURL(url)
         return { ok: false, error: `That photo is too small to print well (under ${MIN_SIDE_PX} px).` }
+      }
+      if (!mounted.current) {
+        // The planner closed while the photo was decoding: nothing can show it, so release it now.
+        URL.revokeObjectURL(url)
+        return { ok: false, error: 'The upload was cancelled.' }
       }
       urls.current.add(url)
       return {

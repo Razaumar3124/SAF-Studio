@@ -9,7 +9,7 @@ import {
   SlidersHorizontal,
   Sofa,
 } from 'lucide-react'
-import { useId, useRef, useState, type Dispatch } from 'react'
+import { useId, useRef, useState, type Dispatch, type ReactNode } from 'react'
 import { samplePhotos } from '@/assets/memoryWall'
 import { Alert } from '@/components/feedback/Alert'
 import { Button } from '@/components/ui/Button'
@@ -221,7 +221,7 @@ function PhotoPicker({
     else setError(result.error)
   }
 
-  let info: React.ReactNode = 'No photo yet · JPEG, PNG or WebP up to 25 MB'
+  let info: ReactNode = 'No photo yet · JPEG, PNG or WebP up to 25 MB'
   let mismatch: Orientation | null = null
   if (photo?.kind === 'upload') {
     const g = frameGeometry(frame)

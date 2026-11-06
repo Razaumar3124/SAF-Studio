@@ -1,5 +1,5 @@
 import { Check, Download, Hash, LoaderCircle, Ruler, Sofa, TriangleAlert } from 'lucide-react'
-import { useEffect, useRef, useState, type Dispatch, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type Dispatch, type ReactNode, type RefObject } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { cn } from '@/lib/cn'
 import { formatLength } from '@/lib/units'
@@ -143,7 +143,7 @@ function DownloadButton({
   scene,
   state,
 }: {
-  svgRef: React.RefObject<SVGSVGElement | null>
+  svgRef: RefObject<SVGSVGElement | null>
   scene: Scene
   state: PlannerState
 }) {

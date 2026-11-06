@@ -193,10 +193,14 @@ describe('laptop auth tokens (≥ 1024px)', () => {
   })
 
   it('reduces input text only for mouse / trackpad laptops (touch keeps 16px)', () => {
-    const fine = queries.find((q) => q.includes('(pointer: fine)'))
-    expect(fine).toBeDefined()
-    expect(css.slice(css.indexOf(fine as string))).toContain('--field-text: 0.9375rem')
+    // The only rules that shrink input text are behind `(pointer: fine)` (the scaled desktop layer).
+    const fine = queries.filter((q) => q.includes('(pointer: fine)'))
+    expect(fine).toEqual(['(min-width: 64rem) and (pointer: fine)'])
+    const fineAt = section.indexOf(`@media ${fine[0]} {`)
+    expect(section.slice(fineAt)).toContain('--field-text: max(0.9375rem, 12px)')
+    // Touch laptops: neither the laptop layer nor any other non-fine query sets a smaller input text.
     expect(laptop['--field-text']).toBeUndefined()
+    expect(section.slice(0, fineAt)).not.toMatch(/--field-text:\s*0\.9375rem/)
   })
 })
 

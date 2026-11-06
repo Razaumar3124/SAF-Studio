@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as mockAuth from '../lib/mockAuth'
@@ -12,7 +13,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function renderAt(element: React.ReactNode) {
+function renderAt(element: ReactNode) {
   const router = createMemoryRouter(
     [
       { path: '/', element },

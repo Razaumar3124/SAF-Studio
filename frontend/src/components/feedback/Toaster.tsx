@@ -1,5 +1,5 @@
 import { CircleAlert, CircleCheck, Info, X, type LucideIcon } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
 import { ToastContext, type ToastInput, type ToastTone } from './toastContext'
@@ -34,10 +34,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((list) => [...list.slice(-2), { ...input, id }])
   }, [])
 
-  const value = useMemo(() => show, [show])
-
   return (
-    <ToastContext.Provider value={value}>
+    <ToastContext.Provider value={show}>
       {children}
       <div
         role="status"

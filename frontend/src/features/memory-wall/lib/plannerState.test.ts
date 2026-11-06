@@ -13,8 +13,35 @@ describe('plannerReducer guards', () => {
   it('ignores NaN frame counts and variants instead of corrupting state', () => {
     const s = createInitialState()
     expect(plannerReducer(s, { type: 'frames/setCount', count: Number.NaN })).toBe(s)
-    expect(plannerReducer(s, { type: 'layout/setVariant', variant: Number.NaN })).toBe(s)
     expect(plannerReducer(s, { type: 'layout/apply', style: 'grid', variant: Number.NaN })).toBe(s)
+  })
+
+  it('never lets an invalid mount value into state (regression: NaN margin was spread through)', () => {
+    const s = createInitialState()
+    const before = must(s.frames[0]).mount
+    for (const marginIn of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])
+      expect(plannerReducer(s, { type: 'frames/updateMount', index: 0, patch: { marginIn } })).toBe(s)
+    expect(plannerReducer(s, { type: 'frames/updateMount', index: 0, patch: { colourId: 'nope' } })).toBe(s)
+    expect(plannerReducer(s, { type: 'frames/updateMount', index: 0, patch: { colourId: '' } })).toBe(s)
+    const badFlag = { enabled: 'yes' } as unknown as { enabled: boolean }
+    expect(plannerReducer(s, { type: 'frames/updateMount', index: 0, patch: badFlag })).toBe(s)
+    // Unknown keys in the patch are not copied into the mount.
+    const extra = { marginIn: 3, bogus: 1 } as unknown as { marginIn: number }
+    const next = plannerReducer(s, { type: 'frames/updateMount', index: 0, patch: extra })
+    expect(must(next.frames[0]).mount).toEqual({ ...before, marginIn: 3 })
+  })
+
+  it('updates mount fields and clamps the margin to the planner rules', () => {
+    const s = createInitialState()
+    const before = must(s.frames[1]).mount
+    const off = plannerReducer(s, { type: 'frames/updateMount', index: 1, patch: { enabled: false } })
+    expect(must(off.frames[1]).mount).toEqual({ ...before, enabled: false })
+    const big = plannerReducer(s, { type: 'frames/updateMount', index: 1, patch: { marginIn: 99 } })
+    expect(must(big.frames[1]).mount.marginIn).toBe(PLANNER_RULES.matIn.max)
+    const neg = plannerReducer(s, { type: 'frames/updateMount', index: 1, patch: { marginIn: -4 } })
+    expect(must(neg.frames[1]).mount.marginIn).toBe(PLANNER_RULES.matIn.min)
+    // Other frames are untouched.
+    expect(big.frames[0]).toBe(s.frames[0])
   })
 
   it('sets photos by frame id, so a late upload never lands on the wrong frame', () => {
