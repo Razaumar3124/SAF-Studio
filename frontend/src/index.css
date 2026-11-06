@@ -1,0 +1,403 @@
+@import 'tailwindcss';
+@import './styles/theme.css';
+
+/*
+ * ORDER MATTERS: when two custom variants set the same property, the one declared LATER wins.
+ * Auth density is NOT done with variants: it's the fluid `--auth-*` tokens below.
+ */
+
+/*
+ * Auth hero art is shown only where the split layout has room for it:
+ * ≥ lg AND a landscape viewport of at least 4:3. Mirrors Moonlight (docs/RESPONSIVE.md).
+ * Must match MEDIA.heroFits in src/config/media.ts.
+ */
+@custom-variant hero-fits (@media (min-width: 64rem) and (min-aspect-ratio: 4/3));
+
+/*
+ * Auth backdrop mode (SAF): set by AuthLayout as `data-backdrop` on <main> when `hero-fits` matches
+ * AND the card fits beside the art (features/auth/hooks/useBackdropFits.ts). Usage: `on-backdrop:ml-…`
+ */
+@custom-variant on-backdrop (&:where([data-backdrop], [data-backdrop] *));
+
+/*
+ * Auth root font size on mouse / trackpad desktops (see "SCALED DESKTOP AUTH" below). Registered as a
+ * <length> so getComputedStyle returns the resolved px value: useBackdropFits reads it, so the JS fit
+ * check uses the same rem as the CSS, even before <main data-auth> is mounted.
+ */
+@property --auth-root {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 16px;
+}
+
+@layer base {
+  /* Brand bar height (BrandBar). Auth/planner layouts size the rest of the viewport from it. */
+  :root {
+    --bar-h: 3.75rem;
+  }
+  @media (width >= 40rem) {
+    :root {
+      --bar-h: 4.25rem;
+    }
+  }
+  @media (width >= 64rem) {
+    :root {
+      --bar-h: 4.75rem;
+    }
+  }
+  /* Short landscape screens (landscape phones, 720/768-high laptops) keep more room for content. */
+  @media (max-height: 55rem) and (min-aspect-ratio: 1/1) {
+    :root {
+      --bar-h: 3.5rem;
+    }
+  }
+  @media (max-height: 55rem) and (min-aspect-ratio: 1/1) and (width >= 64rem) {
+    :root {
+      --bar-h: 4rem;
+    }
+  }
+  /* ≤ 700px tall landscape (1280×600, 1920×1080 at 150 % scaling): the slimmest bar. */
+  @media (max-height: 43.75rem) and (min-aspect-ratio: 1/1) {
+    :root {
+      --bar-h: 3.5rem;
+    }
+  }
+
+  /* Text field height (TextField). Auth pages override it with a fluid value below. */
+  :root {
+    --field-h: 3rem;
+    --field-label-gap: 0.5rem;
+    --field-label-text: 0.875rem;
+    --field-text: 1rem;
+    --field-icon: 1.25rem;
+    --field-toggle: 2.5rem;
+    --field-hint-text: 0.875rem;
+    --field-label-leading: 1.25rem; /* fixed 20px, as the former leading-5 */
+  }
+  @media (width >= 40rem) {
+    :root {
+      --field-h: 3.25rem;
+    }
+  }
+
+  /*
+   * Fluid auth sizing (Login, Register, Forgot password: AuthLayout sets `data-auth` on <main>).
+   * Every size is clamp(MIN, min(WIDTH TERM, HEIGHT TERM), MAX):
+   * - WIDTH TERM: linear from MIN at a 360px-wide viewport to MAX at 1440px (phones → desktop);
+   * - HEIGHT TERM: linear through two anchors. Login: the compact values at 589px tall (1920×1080 at
+   *   150 % scaling) and the mockup values at 900px. Spacing falls faster than controls, because
+   *   labels and the 40px minimum controls can't shrink.
+   * So fonts, fields, buttons and spacing shrink together with whichever dimension is tighter, are
+   * exactly the desktop mockup at 1440×900 and above, and bottom out at phone-legible minimums
+   * (controls 40px; input text stays 16px so iOS doesn't zoom). docs/RESPONSIVE.md, "Fluid sizing".
+   */
+  [data-auth] {
+    --auth-alt-text: 1rem;
+    --auth-btn-icon: 1.25rem;
+    --auth-card-max: 100vw; /* no extra cap (the laptop block below sets one) */
+    --auth-title: clamp(1.75rem, min(20px + 2.2222vw, 7.074dvh - 11.67px), 3.25rem); /* 28 → 52 */
+    --auth-subtitle: clamp(0.9375rem, min(14px + 0.2778vw, 1.286dvh + 6.43px), 1.125rem); /* 15 → 18 */
+    --auth-prompt: clamp(0.875rem, min(13.333px + 0.1852vw, 0.643dvh + 10.2px), 1rem); /* 14 → 16 */
+    --field-h: clamp(2.5rem, min(36px + 1.1111vw, 3.859dvh + 17.27px), 3.25rem); /* 40 → 52 */
+    --field-label-gap: clamp(0.375rem, min(5.333px + 0.1852vw, 0.643dvh + 2.2px), 0.5rem); /* 6 → 8 */
+    --auth-cta-h: var(--field-h);
+    --auth-cta-text: clamp(0.9375rem, min(14.333px + 0.1852vw, 0.643dvh + 11.2px), 1.0625rem); /* 15 → 17 */
+    --auth-alt-h: clamp(2.5rem, min(37.333px + 0.7407vw, 2.572dvh + 24.85px), 3rem); /* Google: 40 → 48 */
+    --auth-card-px: clamp(1.25rem, min(13.333px + 1.8519vw, 4.4444dvh), 2.5rem); /* 20 → 40 */
+    --auth-card-py: clamp(0.875rem, min(13.333px + 1.8519vw, 7.717dvh - 29.45px), 2.5rem); /* 14 → 40 */
+    --auth-zone-py: clamp(0.5rem, min(5.333px + 1.8519vw, 7.717dvh - 37.45px), 2rem); /* 8 → 32 */
+    --auth-stack-gap: clamp(0.75rem, min(10.667px + 1.4815vw, 6.431dvh - 25.88px), 2rem); /* page: 12 → 32 */
+    --auth-header-gap: clamp(0.375rem, min(4px + 0.5556vw, 1.929dvh - 5.36px), 0.75rem); /* 6 → 12 */
+    --auth-section-gap: clamp(
+      0.75rem,
+      min(8px + 1.1111vw, 3.859dvh - 10.73px),
+      1.5rem
+    ); /* CTA / OR / Google: 12 → 24 */
+    --auth-form-gap: clamp(
+      0.75rem,
+      min(9.333px + 0.7407vw, 2.572dvh - 3.15px),
+      1.25rem
+    ); /* fields: 12 → 20 */
+  }
+  /*
+   * LAPTOPS AND SMALL DESKTOPS (SAF only): ≥ 1024px wide AND (≤ 1536px wide OR ≤ 800px tall). Phones and
+   * tablets (< 1024px) never match, so their sizes are the fluid tokens above, unchanged. These
+   * override the same `--auth-*` / `--field-*` tokens for Login and Forgot password (Register has its
+   * own section below): body text 13–14px, fields / buttons 40 → 44px (shrinks with the viewport height, 40px
+   * at 589px tall), card padding 28px, card ≤ 26rem (416px), gaps 6–14px. docs/RESPONSIVE.md, "Laptops".
+   */
+  @media (min-width: 64rem) and ((max-width: 96rem) or (max-height: 50rem)) {
+    [data-auth] {
+      --auth-title: clamp(1.625rem, min(2.4vw, 3.2dvh + 9px), 2.25rem); /* 26 → 36 */
+      --auth-subtitle: 0.875rem;
+      --auth-prompt: 0.8125rem;
+      --field-label-text: 0.8125rem;
+      --field-label-gap: 0.375rem;
+      --field-h: clamp(2.5rem, 2.6dvh + 24.7px, 2.75rem); /* 40 → 44 */
+      --field-icon: 1.125rem;
+      --field-toggle: 2.25rem;
+      --auth-cta-text: 0.9375rem;
+      --auth-alt-text: 0.9375rem;
+      --auth-alt-h: var(--field-h);
+      --auth-btn-icon: 1.125rem;
+      --auth-card-px: 1.75rem;
+      --auth-card-py: clamp(1rem, 3.2dvh, 1.75rem); /* 16 → 28 */
+      --auth-card-max: 26rem;
+      --auth-stack-gap: clamp(0.75rem, 1.5dvh, 0.875rem); /* 12 → 14 */
+      --auth-header-gap: 0.375rem;
+      --auth-section-gap: 0.75rem;
+      --auth-form-gap: 0.75rem;
+    }
+  }
+  /* Mouse / trackpad laptops only: input text 15px. Touch screens ≥ 1024px (iPad landscape) keep 16px,
+     because iOS Safari zooms the page on focusing smaller input text. */
+  @media (min-width: 64rem) and ((max-width: 96rem) or (max-height: 50rem)) and (pointer: fine) {
+    [data-auth] {
+      --field-text: 0.9375rem;
+    }
+  }
+
+  /*
+   * REGISTER (5 fields + password hint): fits the viewport with no scroll from ~600px tall up.
+   * Overrides every token for `[data-auth][data-compact]` and is declared AFTER the Login and laptop
+   * blocks, so it wins for Register only (Login and Forgot password never have `data-compact`).
+   * Each size is linear in the viewport HEIGHT between two anchors, clamped at both ends:
+   *   600px tall (1280×600, 1920×1080 at 150 %)  → compact: 36px controls, 13px text, 3–7px gaps
+   *   1080px tall (1920×1080)                     → the mockup: 52px controls, 44px title
+   * so 1366×768 sits ~35 % of the way up (≈ 42px controls). Phones get the same height-driven values
+   * (≈ 38px controls at 375×667); input text stays 16px except on mouse laptops (iOS zoom).
+   * docs/RESPONSIVE.md, "Register".
+   */
+  [data-auth][data-compact] {
+    --auth-title: clamp(1.375rem, 4.1667dvh - 1px, 2.75rem); /* 24 → 44 */
+    --auth-subtitle: clamp(0.8125rem, 1.0417dvh + 6.75px, 1.125rem); /* 13 → 18 */
+    --auth-prompt: clamp(0.8125rem, 0.625dvh + 9.25px, 1rem); /* 13 → 16 */
+    --field-h: clamp(2.125rem, 3.3333dvh + 16px, 3.25rem); /* 36 → 52 (34 below 600px tall) */
+    --field-label-text: clamp(0.8125rem, 0.2083dvh + 11.75px, 0.875rem); /* 13 → 14 */
+    --field-label-gap: clamp(0.1875rem, 1.0417dvh - 3.25px, 0.5rem); /* 3 → 8 */
+    --field-hint-text: clamp(0.75rem, 0.4167dvh + 9.5px, 0.875rem); /* 12 → 14 */
+    --field-text: 1rem;
+    --field-icon: clamp(1.125rem, 0.4167dvh + 15.5px, 1.25rem); /* 18 → 20 */
+    --field-toggle: clamp(2rem, 1.6667dvh + 22px, 2.5rem); /* 32 → 40 */
+    --auth-cta-h: var(--field-h);
+    --auth-cta-text: clamp(0.875rem, 0.625dvh + 10.25px, 1.0625rem); /* 14 → 17 */
+    --auth-alt-h: clamp(2.25rem, 2.5dvh + 21px, 3rem); /* Google: 36 → 48 */
+    --auth-alt-text: clamp(0.875rem, 0.4167dvh + 11.5px, 1rem); /* 14 → 16 */
+    --auth-btn-icon: clamp(1rem, 0.8333dvh + 11px, 1.25rem); /* 16 → 20 */
+    --auth-card-px: clamp(1.25rem, min(13.333px + 1.8519vw, 4.1667dvh - 5px), 2.5rem); /* 20 → 40 */
+    --field-label-leading: 1.25; /* 16px lines at 13px (Login: 20px) */
+    --auth-card-py: clamp(0.625rem, 6.25dvh - 27.5px, 2.5rem); /* 10 → 40 */
+    --auth-card-max: 100vw;
+    --auth-zone-py: clamp(0.125rem, 6.25dvh - 35.5px, 2rem); /* 2 → 32 */
+    --auth-stack-gap: clamp(0.375rem, 3.75dvh - 16.5px, 1.5rem); /* 6 → 24 */
+    --auth-header-gap: clamp(0.1875rem, 1.0417dvh - 3.25px, 0.5rem); /* 3 → 8 */
+    --auth-section-gap: clamp(0.375rem, 2.9167dvh - 11.5px, 1.25rem); /* 6 → 20 */
+    --auth-form-gap: clamp(0.4375rem, 1.875dvh - 4.25px, 1rem); /* 7 → 16 */
+  }
+  /* Register on laptops: the same 26rem card cap and 15px mouse-only input text as Login. */
+  @media (min-width: 64rem) and ((max-width: 96rem) or (max-height: 50rem)) {
+    [data-auth][data-compact] {
+      --auth-card-max: 26rem;
+    }
+  }
+  @media (min-width: 64rem) and ((max-width: 96rem) or (max-height: 50rem)) and (pointer: fine) {
+    [data-auth][data-compact] {
+      --field-text: 0.9375rem;
+    }
+  }
+
+  /*
+   * SCALED DESKTOP AUTH (Login, Register, Forgot password): ≥ 1024px wide with a mouse / trackpad.
+   * Declared last, so it overrides the laptop and Register sections above, which still apply to touch
+   * screens ≥ 1024px (they keep a 16px root, so iOS never zooms on 16px input text).
+   * - The root font follows the viewport (the planner's formula): 13px at 1280 (and at ≤ 600px tall),
+   *   13.6px at 1366, 17.5px at 1920, 20px cap at 2560. Every rem (brand bar, card, fields, buttons,
+   *   gaps, backdrop card geometry) scales with it, so the pages keep one set of proportions.
+   * - Every token is a fixed rem: the sizes the fluid formulas give at a 1592×738 viewport (the SAF
+   *   reference: a 1280-wide window at 80 % zoom). At a 13px root that is the reference × 0.81.
+   * - Text floors keep small text readable: 11px (eyebrow, OR, hints) and 12px (body, labels, inputs).
+   * docs/RESPONSIVE.md, "Scaled desktop".
+   */
+  @media (min-width: 64rem) and (pointer: fine) {
+    :root {
+      --auth-root: clamp(13px, min(0.7026vw + 4px, 1.5vh + 4px), 20px);
+    }
+    :root:has([data-auth]) {
+      font-size: var(--auth-root);
+    }
+    [data-auth] {
+      --text-xs: max(0.75rem, 11px);
+      --text-sm: max(0.875rem, 12px);
+      --auth-title: 2.0375rem; /* 32.6px at 16 */
+      --auth-subtitle: max(0.875rem, 12px);
+      --auth-prompt: max(0.8125rem, 12px);
+      --field-h: 2.75rem;
+      --field-label-text: max(0.8125rem, 12px);
+      --field-label-gap: 0.375rem;
+      --field-label-leading: 1.25rem;
+      --field-hint-text: max(0.875rem, 12px); /* Login: error messages only */
+      --field-text: max(0.9375rem, 12px);
+      --field-icon: 1.125rem;
+      --field-toggle: 2.25rem;
+      --auth-cta-h: var(--field-h);
+      --auth-cta-text: max(0.9375rem, 12px);
+      --auth-alt-h: var(--field-h);
+      --auth-alt-text: max(0.9375rem, 12px);
+      --auth-btn-icon: 1.125rem;
+      --auth-card-px: 1.75rem;
+      --auth-card-py: 1.5rem;
+      --auth-card-max: 26rem;
+      --auth-zone-py: 1.25rem;
+      --auth-stack-gap: 0.75rem;
+      --auth-header-gap: 0.375rem;
+      --auth-section-gap: 0.75rem;
+      --auth-form-gap: 0.75rem;
+    }
+    [data-auth][data-compact] {
+      --auth-title: 1.86rem; /* 29.75px at 16 */
+      --auth-subtitle: max(0.9rem, 12px);
+      --auth-prompt: max(0.866rem, 12px);
+      --field-h: 2.5375rem;
+      --field-label-text: max(0.83rem, 12px);
+      --field-label-gap: 0.2775rem;
+      --field-label-leading: 1.25;
+      --field-hint-text: max(0.786rem, 11px);
+      --field-text: max(0.9375rem, 12px);
+      --field-icon: 1.16rem;
+      --field-toggle: 2.144rem;
+      --auth-cta-text: max(0.929rem, 12px);
+      --auth-alt-h: 2.466rem;
+      --auth-alt-text: max(0.911rem, 12px);
+      --auth-btn-icon: 1.072rem;
+      --auth-card-px: 1.61rem;
+      --auth-card-py: 1.1625rem;
+      --auth-card-max: 26rem;
+      --auth-zone-py: 0.6625rem;
+      --auth-stack-gap: 0.7rem;
+      --auth-header-gap: 0.2775rem;
+      --auth-section-gap: 0.627rem;
+      --auth-form-gap: 0.6rem;
+    }
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    /* Fills overscroll/bounce areas with the page colour instead of white. */
+    background-color: var(--color-mist-50);
+  }
+
+  body {
+    @apply bg-mist-50 font-sans text-ink-700 antialiased;
+    min-height: 100dvh;
+  }
+
+  /*
+   * Memory Wall Planner (`<div data-planner>`), docs/RESPONSIVE.md "Planner density". The root font size
+   * sizes every rem (text, icons, controls, spacing, the brand bar), so one value scales the whole planner
+   * in proportion. Set on :root, so the planner's dialogs and toasts follow. Media queries are unaffected
+   * (they use the initial 16px). Other pages never match `:has([data-planner])`.
+   * - Default (phones, tablets, < 1256px, touch screens): 16px, growing with the viewport from 1440×720 to
+   *   20px at 2560×1440.
+   * - No visible page scrollbar; scrolling (wheel, touchpad, keys, touch) works as usual.
+   */
+  :root:has([data-planner]) {
+    font-size: clamp(1rem, min(0.3571vw + 10.857px, 0.5556vh + 12px), 1.25rem);
+    scrollbar-width: none;
+  }
+  :root:has([data-planner])::-webkit-scrollbar {
+    display: none;
+  }
+  /*
+   * Desktop grid (`desk`, ≥ 1256px) with a mouse / trackpad: the SAF reference proportions. The reference
+   * is the 16px design in a ≈ 1707px-wide viewport, so the root follows the width from there:
+   * 13px at 1280 (≈ 0.8 of the reference), 13.6px at 1366, 16px at 1707, 17.5px at 1920, 20px cap at 2560.
+   * Also height-bound (13px at 600px tall, 16px at 800px: the reference) so short screens don't grow taller.
+   * Text floors keep the small sizes readable at 13px: text-xs ≥ 11px, text-sm ≥ 12px.
+   * Touch screens (pointer: coarse, e.g. iPad Pro landscape) keep the 16px rule above, so input text
+   * stays at 16px (iOS zooms on smaller) and touch targets keep their size.
+   */
+  @media (width >= 78.5rem) and (pointer: fine) {
+    :root:has([data-planner]) {
+      font-size: clamp(13px, min(0.7026vw + 4px, 1.5vh + 4px), 20px);
+      --text-xs: max(0.75rem, 11px);
+      --text-sm: max(0.875rem, 12px);
+    }
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display text-ink-900;
+  }
+
+  /* Keep browser autofill on-brand instead of the default yellow/blue fill. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--color-ink-900);
+    box-shadow: 0 0 0 1000px var(--color-surface) inset;
+    transition: background-color 9999s ease-out 0s;
+  }
+
+  /* Planner canvas frames (SVG <g role="button">): dashed ring on keyboard focus only. */
+  .wall-frame {
+    cursor: pointer;
+    outline: none;
+  }
+  .wall-frame .wall-frame-focus {
+    opacity: 0;
+  }
+  .wall-frame:focus-visible .wall-frame-focus {
+    opacity: 1;
+  }
+
+  /*
+   * Auth backdrop box edges (features/auth/components/AuthHero.tsx): the sharp image fades into the
+   * edge-colour fill behind it. Widths come from backdropStyle (`--fade-card` / `--fade-art`):
+   * they grow with the side margins on wide windows, but stop short of any baked text.
+   */
+  .backdrop-fade-left {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 var(--fade-card, 3rem),
+      #000 calc(100% - var(--fade-art, 0.75rem)),
+      transparent
+    );
+  }
+  .backdrop-fade-right {
+    mask-image: linear-gradient(
+      to left,
+      transparent,
+      #000 var(--fade-card, 3rem),
+      #000 calc(100% - var(--fade-art, 0.75rem)),
+      transparent
+    );
+  }
+  /* Narrow landscape (≈ 4:3): the baked captions on the card side are cropped mid-word, so fade them out. */
+  @media (max-aspect-ratio: 10/7) {
+    .backdrop-fade-left {
+      mask-image: linear-gradient(
+        to right,
+        transparent calc(var(--cap-in-box) + 0.25rem),
+        #000 calc(var(--cap-in-box) + 3rem),
+        #000 calc(100% - var(--fade-art, 0.75rem)),
+        transparent
+      );
+    }
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-600;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
