@@ -426,6 +426,14 @@ class FakePhotoRepository:
         items = all_user_photos[skip : skip + page_size]
         return items, total
 
+    async def update_visual_analysis(self, photo_id: str, analysis) -> bool:
+        doc = self.photos.get(str(photo_id))
+        if not doc:
+            return False
+        doc["visual_analysis"] = analysis.model_dump()
+        doc["updated_at"] = datetime.now(UTC)
+        return True
+
     async def soft_delete(self, photo_id: str, user_id: str) -> bool:
         doc = self.photos.get(str(photo_id))
         if not doc:

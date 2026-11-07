@@ -5,7 +5,7 @@ from pymongo import ASCENDING, DESCENDING, IndexModel
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.asynchronous.database import AsyncDatabase
 
-from app.models.photo import PhotoInDB
+from app.models.photo import PhotoInDB, VisualAnalysis
 
 
 class PhotoRepository:
@@ -74,6 +74,21 @@ class PhotoRepository:
         async for doc in cursor:
             items.append(PhotoInDB(**doc))
         return items, total
+
+    async def update_visual_analysis(self, photo_id: str, analysis: VisualAnalysis) -> bool:
+        """Cache visual analysis on photo document."""
+        if not ObjectId.is_valid(photo_id):
+            return False
+        res = await self.collection.update_one(
+            {"_id": ObjectId(photo_id)},
+            {
+                "$set": {
+                    "visual_analysis": analysis.model_dump(),
+                    "updated_at": datetime.now(UTC),
+                }
+            },
+        )
+        return res.modified_count > 0
 
     async def soft_delete(self, photo_id: str, user_id: str) -> bool:
         """Mark a photo document as soft-deleted ensuring ownership."""

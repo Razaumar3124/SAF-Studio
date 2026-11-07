@@ -12,17 +12,23 @@ from app.core.exceptions import (
 )
 from app.core.security import decode_access_token
 from app.db.dependencies import get_db
+from app.integrations.groq_client import GroqClient
 from app.models.user import UserInDB
+from app.repositories.ai_cache_repository import AICacheRepository
 from app.repositories.catalog_repository import CatalogRepository
 from app.repositories.photo_repository import PhotoRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.template_repository import TemplateRepository
 from app.repositories.user_repository import UserRepository
+from app.services.ai_usage_service import AIUsageService
 from app.services.auth_service import AuthService
 from app.services.catalog_service import CatalogService
 from app.services.google_auth_service import GoogleAuthService
 from app.services.image_processing_service import ImageProcessingService
+from app.services.layout_service import LayoutService
+from app.services.photo_analysis_service import PhotoAnalysisService
 from app.services.photo_service import PhotoService
+from app.services.redesign_service import RedesignService
 from app.services.template_service import TemplateService
 from app.services.token_service import TokenService
 from app.storage.r2_storage import R2Storage
@@ -186,6 +192,69 @@ async def get_photo_service(
     )
 
 
+async def get_photo_analysis_service(
+    photo_repo: Annotated[PhotoRepository, Depends(get_photo_repository)],
+    r2_storage: Annotated[R2Storage, Depends(get_r2_storage)],
+) -> PhotoAnalysisService:
+    """Dependency for PhotoAnalysisService."""
+    return PhotoAnalysisService(photo_repo=photo_repo, r2_storage=r2_storage)
+
+
+# Global singletons for AI usage budgeting and response caching
+_ai_cache_repo_instance = AICacheRepository()
+_ai_usage_service_instance: AIUsageService | None = None
+
+
+def get_ai_cache_repository() -> AICacheRepository:
+    return _ai_cache_repo_instance
+
+
+def get_ai_usage_service(settings: Annotated[Settings, Depends(get_settings)]) -> AIUsageService:
+    global _ai_usage_service_instance
+    if _ai_usage_service_instance is None:
+        _ai_usage_service_instance = AIUsageService(settings=settings)
+    return _ai_usage_service_instance
+
+
+async def get_groq_client(settings: Annotated[Settings, Depends(get_settings)]) -> GroqClient:
+    """Dependency for GroqClient."""
+    return GroqClient(settings=settings)
+
+
+async def get_layout_service(
+    photo_repo: Annotated[PhotoRepository, Depends(get_photo_repository)],
+    photo_analysis_service: Annotated[PhotoAnalysisService, Depends(get_photo_analysis_service)],
+    groq_client: Annotated[GroqClient, Depends(get_groq_client)],
+    ai_usage_service: Annotated[AIUsageService, Depends(get_ai_usage_service)],
+    ai_cache_repo: Annotated[AICacheRepository, Depends(get_ai_cache_repository)],
+) -> LayoutService:
+    """Dependency for LayoutService."""
+    return LayoutService(
+        photo_repo=photo_repo,
+        photo_analysis_service=photo_analysis_service,
+        groq_client=groq_client,
+        ai_usage_service=ai_usage_service,
+        ai_cache_repo=ai_cache_repo,
+    )
+
+
+async def get_redesign_service(
+    photo_repo: Annotated[PhotoRepository, Depends(get_photo_repository)],
+    photo_analysis_service: Annotated[PhotoAnalysisService, Depends(get_photo_analysis_service)],
+    groq_client: Annotated[GroqClient, Depends(get_groq_client)],
+    ai_usage_service: Annotated[AIUsageService, Depends(get_ai_usage_service)],
+    ai_cache_repo: Annotated[AICacheRepository, Depends(get_ai_cache_repository)],
+) -> RedesignService:
+    """Dependency for RedesignService."""
+    return RedesignService(
+        photo_repo=photo_repo,
+        photo_analysis_service=photo_analysis_service,
+        groq_client=groq_client,
+        ai_usage_service=ai_usage_service,
+        ai_cache_repo=ai_cache_repo,
+    )
+
+
 # Type aliases for clean endpoint injections
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DatabaseDep = Annotated[AsyncDatabase, Depends(get_db)]
@@ -197,6 +266,10 @@ PhotoRepoDep = Annotated[PhotoRepository, Depends(get_photo_repository)]
 ImageProcessingServiceDep = Annotated[ImageProcessingService, Depends(get_image_processing_service)]
 R2StorageDep = Annotated[R2Storage, Depends(get_r2_storage)]
 PhotoServiceDep = Annotated[PhotoService, Depends(get_photo_service)]
+PhotoAnalysisServiceDep = Annotated[PhotoAnalysisService, Depends(get_photo_analysis_service)]
+GroqClientDep = Annotated[GroqClient, Depends(get_groq_client)]
+LayoutServiceDep = Annotated[LayoutService, Depends(get_layout_service)]
+RedesignServiceDep = Annotated[RedesignService, Depends(get_redesign_service)]
 TokenServiceDep = Annotated[TokenService, Depends(get_token_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 GoogleAuthServiceDep = Annotated[GoogleAuthService, Depends(get_google_auth_service)]

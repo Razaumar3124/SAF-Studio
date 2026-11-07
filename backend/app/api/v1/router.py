@@ -4,6 +4,7 @@ from app.api.v1.endpoints import (
     auth,
     frame_materials,
     frames,
+    geometry,
     health,
     photos,
     templates,
@@ -24,3 +25,6 @@ api_v1_router.include_router(templates.router)
 
 # Register Phase 4 endpoints
 api_v1_router.include_router(photos.router)
+
+# Register Phase 5 endpoints
+api_v1_router.include_router(geometry.router)

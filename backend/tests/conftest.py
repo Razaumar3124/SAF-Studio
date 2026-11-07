@@ -1,3 +1,7 @@
+import os
+
+os.environ["ENVIRONMENT"] = "test"
+
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, patch
 

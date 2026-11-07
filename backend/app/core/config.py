@@ -159,6 +159,33 @@ class Settings(BaseSettings):
         description="Validity lifetime in seconds for photo thumbnail and preview HMAC signatures",
     )
 
+    # Groq AI Creative Curator
+    GROQ_API_KEY: str = Field(default="", description="API Key for Groq cloud inference")
+    GROQ_MODEL: str = Field(
+        default="llama-3.3-70b-versatile",
+        description="Groq model ID for layout curation recommendations",
+    )
+    GROQ_ENABLED: bool = Field(
+        default=False,
+        description="Whether Groq AI recommendations are enabled",
+    )
+    GROQ_TIMEOUT_SECONDS: int = Field(
+        default=10,
+        description="Network timeout in seconds for Groq API calls",
+    )
+    GROQ_MAX_OUTPUT_TOKENS: int = Field(
+        default=256,
+        description="Maximum tokens for Groq layout recommendation completion",
+    )
+    GROQ_DAILY_REQUEST_LIMIT: int = Field(
+        default=100,
+        description="Maximum daily AI layout requests per user/IP budget",
+    )
+    GROQ_DAILY_TOKEN_BUDGET: int = Field(
+        default=50000,
+        description="Maximum daily token consumption allowance across application",
+    )
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: str | list[str]) -> list[str]:

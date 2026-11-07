@@ -38,31 +38,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
 
     # 2. Initialize asynchronous MongoDB connection pool and indexes
-    try:
-        await mongo_manager.connect(settings)
-        user_repo = UserRepository(mongo_manager.get_database())
-        session_repo = SessionRepository(mongo_manager.get_database())
-        catalog_repo = CatalogRepository(mongo_manager.get_database())
-        template_repo = TemplateRepository(mongo_manager.get_database())
-        photo_repo = PhotoRepository(mongo_manager.get_database())
-        await user_repo.create_indexes()
-        await session_repo.create_indexes()
-        await catalog_repo.create_indexes()
-        await template_repo.create_indexes()
-        await photo_repo.create_indexes()
-        logger.info("MongoDB collection indexes verified")
-    except Exception as exc:
-        logger.warning(
-            "MongoDB initial connection deferred or failed: %s (will retry on readiness check)",
-            exc,
-        )
+    if settings.ENVIRONMENT != "test":
+        try:
+            await mongo_manager.connect(settings)
+            user_repo = UserRepository(mongo_manager.get_database())
+            session_repo = SessionRepository(mongo_manager.get_database())
+            catalog_repo = CatalogRepository(mongo_manager.get_database())
+            template_repo = TemplateRepository(mongo_manager.get_database())
+            photo_repo = PhotoRepository(mongo_manager.get_database())
+            await user_repo.create_indexes()
+            await session_repo.create_indexes()
+            await catalog_repo.create_indexes()
+            await template_repo.create_indexes()
+            await photo_repo.create_indexes()
+            logger.info("MongoDB collection indexes verified")
+        except Exception as exc:
+            logger.warning(
+                "MongoDB initial connection deferred or failed: %s (will retry on readiness check)",
+                exc,
+            )
 
     yield
 
     # 3. Shutdown: Cleanly close MongoDB connection pool
-    logger.info("Shutting down %s", settings.APP_NAME)
-    await mongo_manager.disconnect()
-    logger.info("Shutdown complete")
+    if settings.ENVIRONMENT != "test":
+        logger.info("Shutting down %s", settings.APP_NAME)
+        await mongo_manager.disconnect()
+        logger.info("Shutdown complete")
 
 
 def create_application() -> FastAPI:
