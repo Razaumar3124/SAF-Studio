@@ -571,6 +571,13 @@ class FakeR2Storage:
             f"https://mock-r2.cloudflarestorage.com/{self.bucket_name}/{key}?expires={expires_in}"
         )
 
+    async def ping(self) -> float:
+        from app.core.exceptions import StorageUnavailableException
+
+        if self.should_fail_upload or self.should_fail_download:
+            raise StorageUnavailableException(issue="Simulated R2 network failure on ping")
+        return 14.2
+
 
 class FakeDesignRepository:
     """In-memory repository simulating MongoDB 'designs' and 'design_versions'."""

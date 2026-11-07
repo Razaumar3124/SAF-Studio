@@ -44,6 +44,30 @@ class R2Storage:
             return self._bucket
         return get_settings().R2_BUCKET_NAME
 
+    async def ping(self) -> float:
+        """Ping Cloudflare R2 bucket and measure round-trip latency in milliseconds."""
+        import time
+
+        client = self._get_client()
+        bucket = self.bucket_name
+        start = time.perf_counter()
+
+        def _sync_ping() -> None:
+            client.head_bucket(Bucket=bucket)
+
+        try:
+            await asyncio.to_thread(_sync_ping)
+            latency_ms = (time.perf_counter() - start) * 1000
+            return round(latency_ms, 2)
+        except ClientError as exc:
+            logger.error("R2 ping failed for bucket %s: %s", bucket, exc)
+            raise StorageUnavailableException(
+                issue=f"Cloudflare R2 bucket '{bucket}' unreachable or permission denied: {exc}"
+            ) from exc
+        except Exception as exc:
+            logger.error("Unexpected error during R2 ping: %s", exc)
+            raise StorageUnavailableException(issue=str(exc)) from exc
+
     async def put_object(
         self,
         key: str,

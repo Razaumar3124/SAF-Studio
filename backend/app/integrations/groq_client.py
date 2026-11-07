@@ -176,3 +176,61 @@ class GroqClient:
         except Exception as exc:
             logger.warning("Groq inference error: %s. Falling back to geometry.", exc)
             return None, 0
+
+    async def check_health(self) -> dict[str, Any]:
+        """Verify Groq AI Curator configuration and inference connectivity."""
+        import time
+
+        if not self.settings.GROQ_ENABLED:
+            return {
+                "status": "disabled",
+                "enabled": False,
+                "model": self.settings.GROQ_MODEL,
+            }
+
+        api_key = self.settings.GROQ_API_KEY.strip()
+        if not api_key:
+            return {
+                "status": "misconfigured",
+                "enabled": True,
+                "model": self.settings.GROQ_MODEL,
+                "issue": "GROQ_API_KEY is not set",
+            }
+
+        start = time.perf_counter()
+        timeout = httpx.Timeout(3.0)
+        try:
+            if self._client:
+                resp = await self._client.get(
+                    "https://api.groq.com/openai/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    timeout=timeout,
+                )
+            else:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    resp = await client.get(
+                        "https://api.groq.com/openai/v1/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+            latency = round((time.perf_counter() - start) * 1000, 2)
+            if resp.status_code == 200:
+                return {
+                    "status": "ready",
+                    "enabled": True,
+                    "model": self.settings.GROQ_MODEL,
+                    "latency_ms": latency,
+                }
+            return {
+                "status": "degraded",
+                "enabled": True,
+                "model": self.settings.GROQ_MODEL,
+                "issue": f"Groq API returned HTTP {resp.status_code}",
+                "latency_ms": latency,
+            }
+        except Exception as exc:
+            return {
+                "status": "unreachable",
+                "enabled": True,
+                "model": self.settings.GROQ_MODEL,
+                "issue": str(exc),
+            }

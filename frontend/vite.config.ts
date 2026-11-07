@@ -82,9 +82,11 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       // Forward backend paths to FastAPI so the browser never hits CORS locally.
       // /static serves catalogue/template thumbnails referenced by relative URLs in API responses.
+      // /q serves short-link redirects for shared WhatsApp quote reports.
       proxy: {
         '/api': { target: apiTarget, changeOrigin: true },
         '/static': { target: apiTarget, changeOrigin: true },
+        '/q': { target: apiTarget, changeOrigin: true },
       },
     },
     test: {

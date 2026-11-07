@@ -5,6 +5,7 @@ structured message summaries for SAF Studio Memory Wall quote requests.
 """
 
 import urllib.parse
+from typing import Any
 
 from app.core.config import get_settings
 
@@ -120,3 +121,19 @@ class WhatsAppService:
         """Encode message and construct official WhatsApp Click-to-Chat URL."""
         encoded_message = urllib.parse.quote(message, safe="")
         return f"https://wa.me/{self.business_number}?text={encoded_message}"
+
+    def check_health(self) -> dict[str, Any]:
+        """Verify WhatsApp configuration and Click-to-Chat readiness."""
+
+        settings = get_settings()
+        num = self.business_number
+        is_placeholder = num in ("919876543210", "1234567890", "")
+        is_valid_format = num.isdigit() and (10 <= len(num) <= 15)
+
+        return {
+            "status": "configured" if is_valid_format else "invalid_configuration",
+            "business_number": num,
+            "is_placeholder": is_placeholder,
+            "is_valid_format": is_valid_format,
+            "public_app_url": settings.PUBLIC_APP_URL,
+        }

@@ -235,6 +235,65 @@ class EmailService:
             issue=f"Unknown provider '{settings.EMAIL_PROVIDER}'",
         )
 
+    async def check_health(self) -> dict[str, Any]:
+        """Verify transactional email provider status."""
+        import time
+
+        settings = get_settings()
+        if settings.EMAIL_PROVIDER == "mock":
+            return {
+                "status": "ready",
+                "provider": "mock",
+                "from_email": settings.RESEND_FROM_EMAIL,
+                "mock_emails_queued": len(self.mock_sent_emails),
+            }
+
+        if settings.EMAIL_PROVIDER == "resend":
+            api_key = settings.RESEND_API_KEY.strip()
+            if not api_key:
+                return {
+                    "status": "misconfigured",
+                    "provider": "resend",
+                    "from_email": settings.RESEND_FROM_EMAIL,
+                    "issue": "RESEND_API_KEY is not set",
+                }
+
+            start = time.perf_counter()
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as client:
+                    resp = await client.get(
+                        "https://api.resend.com/api-keys",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                latency = round((time.perf_counter() - start) * 1000, 2)
+                if resp.status_code == 200:
+                    return {
+                        "status": "ready",
+                        "provider": "resend",
+                        "from_email": settings.RESEND_FROM_EMAIL,
+                        "latency_ms": latency,
+                    }
+                return {
+                    "status": "degraded",
+                    "provider": "resend",
+                    "from_email": settings.RESEND_FROM_EMAIL,
+                    "issue": f"Resend API returned HTTP {resp.status_code}",
+                    "latency_ms": latency,
+                }
+            except Exception as exc:
+                return {
+                    "status": "unreachable",
+                    "provider": "resend",
+                    "from_email": settings.RESEND_FROM_EMAIL,
+                    "issue": str(exc),
+                }
+
+        return {
+            "status": "unknown_provider",
+            "provider": settings.EMAIL_PROVIDER,
+            "issue": f"Unsupported provider: {settings.EMAIL_PROVIDER}",
+        }
+
 
 # Global singleton instance for injection and test inspection
 email_service = EmailService()
