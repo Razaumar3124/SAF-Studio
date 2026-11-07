@@ -78,9 +78,7 @@ class QuotePrepareInput(BaseModel):
     )
     wall: QuoteWallInput
     layout: QuoteLayoutInput = Field(default_factory=QuoteLayoutInput)
-    frames: list[QuoteFrameInput] = Field(
-        min_length=1, max_length=50, description="List of frames"
-    )
+    frames: list[QuoteFrameInput] = Field(min_length=1, max_length=50, description="List of frames")
 
     model_config = {"populate_by_name": True}
 

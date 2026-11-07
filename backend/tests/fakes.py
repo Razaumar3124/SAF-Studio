@@ -69,6 +69,13 @@ class FakeUserRepository:
         if str(user_id) in self.users:
             self.users[str(user_id)]["google_id"] = google_id
 
+    async def update_password(self, user_id: str, password_hash: str) -> None:
+        if str(user_id) in self.users:
+            now = datetime.now(UTC)
+            self.users[str(user_id)]["password_hash"] = password_hash
+            self.users[str(user_id)]["password_changed_at"] = now
+            self.users[str(user_id)]["updated_at"] = now
+
 
 class FakeSessionRepository:
     """In-memory session repository simulating refresh_tokens and password_resets."""
@@ -125,6 +132,63 @@ class FakeSessionRepository:
         for doc in self.password_resets.values():
             if str(doc["_id"]) == str(reset_id):
                 doc["used"] = True
+
+    async def get_active_otp(self, email: str) -> PasswordResetInDB | None:
+        norm = email.strip().lower()
+        now = datetime.now(UTC)
+        for doc in self.password_resets.values():
+            if (
+                doc.get("email")
+                and doc["email"].lower() == norm
+                and doc.get("purpose") == "email_otp"
+                and not doc.get("used", False)
+                and doc["expires_at"] > now
+            ):
+                return PasswordResetInDB(**doc)
+        return None
+
+    async def invalidate_active_otps(self, email: str) -> None:
+        norm = email.strip().lower()
+        for doc in self.password_resets.values():
+            if (
+                doc.get("email")
+                and doc["email"].lower() == norm
+                and doc.get("purpose") == "email_otp"
+                and not doc.get("used", False)
+            ):
+                doc["used"] = True
+
+    async def increment_otp_attempts(self, reset_id: str) -> int:
+        for doc in self.password_resets.values():
+            if str(doc["_id"]) == str(reset_id):
+                doc["attempts"] = doc.get("attempts", 0) + 1
+                if doc["attempts"] >= doc.get("max_attempts", 3):
+                    doc["used"] = True
+                return doc["attempts"]
+        return 3
+
+    async def consume_otp_atomically(self, reset_id: str) -> bool:
+        for doc in self.password_resets.values():
+            if str(doc["_id"]) == str(reset_id):
+                if doc.get("used", False):
+                    return False
+                doc["used"] = True
+                return True
+        return False
+
+    async def consume_reset_session_atomically(self, token_hash: str) -> PasswordResetInDB | None:
+        now = datetime.now(UTC)
+        doc = self.password_resets.get(token_hash)
+        if not doc:
+            return None
+        if (
+            doc.get("purpose") == "password_reset_session"
+            and not doc.get("used", False)
+            and doc["expires_at"] > now
+        ):
+            doc["used"] = True
+            return PasswordResetInDB(**doc)
+        return None
 
 
 class FakeCatalogRepository:

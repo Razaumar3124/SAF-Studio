@@ -49,6 +49,34 @@ def generate_secure_token(nbytes: int = 32) -> str:
     return secrets.token_urlsafe(nbytes)
 
 
+def generate_otp() -> str:
+    """Generate a cryptographically secure 6-digit numeric OTP (100000-999999)."""
+    return f"{secrets.randbelow(900000) + 100000}"
+
+
+def generate_reset_token() -> str:
+    """Generate a high-entropy, prefixed single-use password reset session token."""
+    return f"rst_{secrets.token_urlsafe(32)}"
+
+
+def hash_otp(email: str, otp: str) -> str:
+    """Compute HMAC-SHA256 hash of a numeric OTP bound to the recipient's email.
+
+    Using HMAC with a server-side secret prevents brute-force rainbow table lookups
+    on short 6-digit numeric codes even if the database is exposed.
+    """
+    settings = get_settings()
+    secret = (settings.OTP_SECRET_KEY.strip() or settings.SECRET_KEY).encode("utf-8")
+    message = f"{email.strip().lower()}:{otp}".encode()
+    return hmac.new(secret, message, hashlib.sha256).hexdigest()
+
+
+def verify_otp_hash(email: str, candidate_otp: str, stored_hash: str) -> bool:
+    """Verify candidate OTP against stored HMAC-SHA256 in constant time."""
+    candidate_hash = hash_otp(email, candidate_otp)
+    return constant_time_compare(candidate_hash, stored_hash)
+
+
 def constant_time_compare(val1: str, val2: str) -> bool:
     """Compare two strings in constant time to prevent timing attacks."""
     return hmac.compare_digest(val1.encode("utf-8"), val2.encode("utf-8"))

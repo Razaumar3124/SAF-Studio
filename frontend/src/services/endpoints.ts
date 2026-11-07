@@ -11,6 +11,9 @@ export const endpoints = {
     register: '/auth/register', // POST  · public
     login: '/auth/login', // POST  · public
     me: '/auth/me', // GET   · bearer
+    forgotPassword: '/auth/forgot-password', // POST · public
+    verifyOtp: '/auth/forgot-password/verify', // POST · public
+    resetPassword: '/auth/forgot-password/reset', // POST · public
   },
   catalog: {
     frameMaterials: '/frame-materials', // GET · public · ?category&available_only

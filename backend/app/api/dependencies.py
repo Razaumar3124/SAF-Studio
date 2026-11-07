@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends
@@ -9,6 +10,7 @@ from app.core.exceptions import (
     AccountDisabledException,
     InvalidTokenException,
     TokenExpiredException,
+    TokenRevokedException,
 )
 from app.core.security import decode_access_token
 from app.db.dependencies import get_db
@@ -110,6 +112,11 @@ async def get_current_user(
 
     if not user.is_active:
         raise AccountDisabledException()
+
+    if user.password_changed_at:
+        token_iat = datetime.fromtimestamp(payload.get("iat", 0), tz=UTC)
+        if token_iat < user.password_changed_at - timedelta(seconds=1):
+            raise TokenRevokedException("Access token invalidated due to password change.")
 
     return user
 

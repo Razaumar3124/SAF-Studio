@@ -18,6 +18,10 @@ from app.schemas.auth import (
     LoginRequest,
     RefreshTokenRequest,
     RegisterRequest,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
+    VerifyOtpRequest,
+    VerifyOtpResponse,
 )
 from app.schemas.common import ApiErrorResponse
 from app.schemas.user import UserOut
@@ -228,7 +232,7 @@ async def get_me(current_user: CurrentUserDep) -> UserOut:
     "/forgot-password",
     response_model=ForgotPasswordResponse,
     status_code=status.HTTP_200_OK,
-    summary="Initiate password recovery",
+    summary="Initiate email OTP password recovery",
     description=(
         "Initiates password recovery for the given email address. Deliberately non-enumerating."
     ),
@@ -238,9 +242,67 @@ async def forgot_password(
     request: Request,
     auth_service: AuthServiceDep,
 ) -> ForgotPasswordResponse:
-    """EP-AUTH-06: Password recovery initiation."""
+    """EP-AUTH-06: Step 1 - Password recovery initiation and email OTP dispatch."""
     client_ip = request.client.host if request.client else None
-    return await auth_service.initiate_password_recovery(req, ip_address=client_ip)
+    return await auth_service.request_password_reset_otp(req, ip_address=client_ip)
+
+
+@router.post(
+    "/forgot-password/verify",
+    response_model=VerifyOtpResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Verify password recovery OTP",
+    description=(
+        "Verifies the 6-digit email OTP and issues a single-use "
+        "temporary password reset session token."
+    ),
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ApiErrorResponse,
+            "description": "Invalid, expired, or locked OTP",
+        },
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "model": ApiErrorResponse,
+            "description": "Too many verification attempts",
+        },
+    },
+)
+async def verify_forgot_password_otp(
+    req: VerifyOtpRequest,
+    request: Request,
+    auth_service: AuthServiceDep,
+) -> VerifyOtpResponse:
+    """EP-AUTH-07: Step 2 - Verify OTP and receive temporary reset token."""
+    client_ip = request.client.host if request.client else None
+    return await auth_service.verify_password_reset_otp(req, ip_address=client_ip)
+
+
+@router.post(
+    "/forgot-password/reset",
+    response_model=ResetPasswordResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Reset account password",
+    description=(
+        "Consumes the reset session token, validates the new password, "
+        "updates credentials, and revokes active sessions."
+    ),
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ApiErrorResponse,
+            "description": "Invalid password policy or password reuse",
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ApiErrorResponse,
+            "description": "Invalid or expired reset session token",
+        },
+    },
+)
+async def reset_password(
+    req: ResetPasswordRequest,
+    auth_service: AuthServiceDep,
+) -> ResetPasswordResponse:
+    """EP-AUTH-08: Step 3 - Update account password using single-use reset token."""
+    return await auth_service.reset_password_with_token(req)
 
 
 @router.post(

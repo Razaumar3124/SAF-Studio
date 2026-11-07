@@ -28,11 +28,16 @@ class RefreshTokenInDB(BaseModel):
 
 
 class PasswordResetInDB(BaseModel):
-    """Internal MongoDB password reset token document representation."""
+    """Internal MongoDB password reset & OTP challenge document representation."""
 
     id: PyObjectId = Field(default_factory=lambda: str(ObjectId()), alias="_id")
     user_id: PyObjectId
+    email: str | None = None
     token_hash: str
+    purpose: str = Field(default="password_reset")
+    attempts: int = Field(default=0)
+    max_attempts: int = Field(default=3)
+    resend_available_at: datetime | None = None
     expires_at: datetime
     used: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

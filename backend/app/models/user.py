@@ -30,6 +30,7 @@ class UserInDB(BaseModel):
     auth_provider: str = Field(default="local")
     google_id: str | None = None
     last_login_at: datetime | None = None
+    password_changed_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

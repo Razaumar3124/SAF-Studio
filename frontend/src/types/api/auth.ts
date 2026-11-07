@@ -52,3 +52,34 @@ export interface AuthResponse<TUser = User> {
 export type RegisterResponse = AuthResponse<User>
 export type LoginResponse = AuthResponse<LoginUser>
 export type MeResponse = User
+
+/** POST /auth/forgot-password */
+export interface ForgotPasswordRequest {
+  email: string
+}
+
+export interface ForgotPasswordResponse {
+  message: string
+  cooldown_seconds: number
+}
+
+/** POST /auth/forgot-password/verify */
+export interface VerifyOtpRequest {
+  email: string
+  otp: string
+}
+
+export interface VerifyOtpResponse {
+  reset_token: string
+  expires_in_seconds: number
+}
+
+/** POST /auth/forgot-password/reset */
+export interface ResetPasswordRequest {
+  reset_token: string
+  new_password: string
+}
+
+export interface ResetPasswordResponse {
+  message: string
+}

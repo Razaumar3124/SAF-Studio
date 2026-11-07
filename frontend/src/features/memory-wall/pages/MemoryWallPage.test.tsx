@@ -15,6 +15,12 @@ import MemoryWallPage from './MemoryWallPage'
  * still wired to them, including edge cases: zero/negative/garbage input, bounds, extreme aspects.
  */
 beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true
+  }
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false
+  }
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: query.includes('48rem'), // tablet-up: panels expanded (not collapsible)
     media: query,
@@ -194,7 +200,7 @@ describe('Planner layout (audit regressions)', () => {
       access_token: 'fake-jwt-token',
       refresh_token: 'fake-refresh-token',
       expires_in: 3600,
-      token_type: 'Bearer',
+      token_type: 'bearer',
     })
 
     const mockWindow = {

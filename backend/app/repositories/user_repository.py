@@ -91,3 +91,18 @@ class UserRepository:
                 {"_id": ObjectId(user_id)},
                 {"$set": {"google_id": google_id, "updated_at": datetime.now(UTC)}},
             )
+
+    async def update_password(self, user_id: str, password_hash: str) -> None:
+        """Update user password hash and record password change timestamp."""
+        if ObjectId.is_valid(user_id):
+            now = datetime.now(UTC)
+            await self.collection.update_one(
+                {"_id": ObjectId(user_id)},
+                {
+                    "$set": {
+                        "password_hash": password_hash,
+                        "password_changed_at": now,
+                        "updated_at": now,
+                    }
+                },
+            )

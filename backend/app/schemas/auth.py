@@ -157,8 +157,79 @@ class ForgotPasswordResponse(BaseModel):
     """Non-enumerating response for password recovery initiation."""
 
     message: str = Field(
-        default="If that email is registered, we have sent instructions to reset your password.",
+        default="If an account is associated with this email, a verification code was sent.",
         description="Status message",
+    )
+    cooldown_seconds: int = Field(
+        default=60,
+        description="Minimum seconds to wait before requesting another OTP",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class VerifyOtpRequest(BaseModel):
+    """OTP code verification payload."""
+
+    email: EmailStr = Field(..., description="Account email address")
+    otp: str = Field(
+        ..., min_length=6, max_length=6, description="6-digit numeric verification code"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_and_normalize(self) -> "VerifyOtpRequest":
+        self.email = normalize_email(self.email)
+        cleaned_otp = self.otp.strip()
+        if not cleaned_otp.isdigit() or len(cleaned_otp) != 6:
+            raise ValueError("Verification code must be exactly 6 digits.")
+        self.otp = cleaned_otp
+        return self
+
+
+class VerifyOtpResponse(BaseModel):
+    """Successful OTP verification payload containing temporary reset authorization token."""
+
+    reset_token: str = Field(..., description="Single-use password reset authorization token")
+    expires_in_seconds: int = Field(
+        default=600,
+        description="Validity lifetime in seconds for the reset token",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ResetPasswordRequest(BaseModel):
+    """Payload to finalize password reset using verified reset token."""
+
+    reset_token: str = Field(..., min_length=10, description="Reset token from OTP verification")
+    new_password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+        description="New password (min 8 chars, 1 letter, 1 digit)",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_password_policy(self) -> "ResetPasswordRequest":
+        if not _PASSWORD_HAS_LETTER.search(self.new_password) or not _PASSWORD_HAS_DIGIT.search(
+            self.new_password
+        ):
+            raise ValueError(
+                "Password must be at least 8 characters and include both a letter and a number."
+            )
+        return self
+
+
+class ResetPasswordResponse(BaseModel):
+    """Response returned upon successful password update."""
+
+    message: str = Field(
+        default="Your password has been successfully reset. Please sign in with your new password.",
+        description="Confirmation message",
     )
 
     model_config = ConfigDict(extra="forbid")

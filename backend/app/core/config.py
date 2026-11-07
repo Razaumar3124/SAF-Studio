@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -111,6 +111,52 @@ class Settings(BaseSettings):
     RATE_LIMIT_PHOTO_UPLOAD_WINDOW_SECONDS: int = Field(
         default=3600,
         description="Time window in seconds for photo upload rate limiting",
+    )
+
+    # Email & Password Recovery (Resend)
+    EMAIL_PROVIDER: Literal["resend", "mock"] = Field(
+        default="mock",
+        description="Transactional email provider: 'resend' for live API, 'mock' for local dev",
+    )
+    RESEND_API_KEY: str = Field(
+        default="",
+        description="Resend REST API key (re_...)",
+    )
+    RESEND_FROM_EMAIL: str = Field(
+        default="SAF Studio <onboarding@resend.dev>",
+        description="Configured sender email address for transactional recovery emails",
+    )
+    EMAIL_OTP_EXPIRE_MINUTES: int = Field(
+        default=10,
+        description="Validity lifetime in minutes for 6-digit password reset OTP codes",
+    )
+    EMAIL_OTP_COOLDOWN_SECONDS: int = Field(
+        default=60,
+        description="Minimum cooldown in seconds between OTP requests for the same email address",
+    )
+    OTP_MAX_ATTEMPTS: int = Field(
+        default=3,
+        description="Maximum failed OTP verification attempts before locking",
+    )
+    OTP_SECRET_KEY: str = Field(
+        default="",
+        description="Dedicated secret key for HMAC-SHA256 OTP hashing (falls back to SECRET_KEY)",
+    )
+    RATE_LIMIT_FORGOT_PASSWORD_MAX_ATTEMPTS: int = Field(
+        default=3,
+        description="Maximum OTP requests per email within rate limit window",
+    )
+    RATE_LIMIT_FORGOT_PASSWORD_WINDOW_SECONDS: int = Field(
+        default=900,
+        description="Time window in seconds (15 minutes) for per-email OTP rate limiting",
+    )
+    RATE_LIMIT_FORGOT_PASSWORD_IP_MAX_ATTEMPTS: int = Field(
+        default=10,
+        description="Maximum OTP requests per IP within rate limit window",
+    )
+    RATE_LIMIT_FORGOT_PASSWORD_IP_WINDOW_SECONDS: int = Field(
+        default=3600,
+        description="Time window in seconds (1 hour) for per-IP OTP rate limiting",
     )
 
     # Cloudflare R2 Object Storage
@@ -241,6 +287,14 @@ class Settings(BaseSettings):
         if env == "production" and ("*" in v or not v):
             raise ValueError("Wildcard or empty CORS_ORIGINS is forbidden in production")
         return v
+
+    @model_validator(mode="after")
+    def validate_email_provider_config(self) -> "Settings":
+        if self.EMAIL_PROVIDER == "resend" and not self.RESEND_API_KEY.strip():
+            raise ValueError(
+                "RESEND_API_KEY must be provided when EMAIL_PROVIDER is set to 'resend'"
+            )
+        return self
 
     @property
     def r2_effective_endpoint_url(self) -> str:
