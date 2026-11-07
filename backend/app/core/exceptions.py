@@ -175,3 +175,35 @@ class RateLimitExceededException(AppException):
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             details=[],
         )
+
+
+class ForbiddenException(AppException):
+    """Raised when an authenticated user attempts to access or mutate an unowned resource."""
+
+    def __init__(
+        self,
+        message: str = "You do not have permission to access or modify this resource.",
+        field: str = "id",
+    ):
+        super().__init__(
+            message=message,
+            code="FORBIDDEN",
+            status_code=status.HTTP_403_FORBIDDEN,
+            details=[{"field": field, "issue": message}],
+        )
+
+
+class StorageUnavailableException(AppException):
+    """Raised when object storage (Cloudflare R2) is unreachable or fails."""
+
+    def __init__(
+        self,
+        message: str = "Storage service is currently unavailable. Please try again later.",
+        issue: str = "R2 storage operation timed out or failed",
+    ):
+        super().__init__(
+            message=message,
+            code="STORAGE_UNAVAILABLE",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            details=[{"field": "storage", "issue": issue}],
+        )

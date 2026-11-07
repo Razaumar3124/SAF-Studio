@@ -6,6 +6,8 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.dependencies import (
     get_catalog_repository,
+    get_photo_repository,
+    get_r2_storage,
     get_session_repository,
     get_template_repository,
     get_user_repository,
@@ -16,6 +18,8 @@ from app.main import create_application
 from app.services.rate_limiter import rate_limiter
 from tests.fakes import (
     FakeCatalogRepository,
+    FakePhotoRepository,
+    FakeR2Storage,
     FakeSessionRepository,
     FakeTemplateRepository,
     FakeUserRepository,
@@ -69,6 +73,18 @@ def fake_template_repo() -> FakeTemplateRepository:
     return repo
 
 
+@pytest.fixture
+def fake_photo_repo() -> FakePhotoRepository:
+    """Isolated in-memory photo repository for tests."""
+    return FakePhotoRepository()
+
+
+@pytest.fixture
+def fake_r2_storage() -> FakeR2Storage:
+    """Isolated in-memory mock Cloudflare R2 object storage."""
+    return FakeR2Storage()
+
+
 @pytest.fixture(autouse=True)
 def setup_default_catalogs(
     fake_catalog_repo: FakeCatalogRepository,
@@ -94,6 +110,8 @@ def app(
     fake_session_repo: FakeSessionRepository,
     fake_catalog_repo: FakeCatalogRepository,
     fake_template_repo: FakeTemplateRepository,
+    fake_photo_repo: FakePhotoRepository,
+    fake_r2_storage: FakeR2Storage,
 ):
     """FastAPI test app instance with overridden dependencies."""
     application = create_application()
@@ -102,6 +120,8 @@ def app(
     application.dependency_overrides[get_session_repository] = lambda: fake_session_repo
     application.dependency_overrides[get_catalog_repository] = lambda: fake_catalog_repo
     application.dependency_overrides[get_template_repository] = lambda: fake_template_repo
+    application.dependency_overrides[get_photo_repository] = lambda: fake_photo_repo
+    application.dependency_overrides[get_r2_storage] = lambda: fake_r2_storage
     return application
 
 

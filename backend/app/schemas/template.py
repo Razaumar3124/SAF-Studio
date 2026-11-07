@@ -92,4 +92,3 @@ class TemplatesListResponse(BaseModel):
 
     items: list[LayoutTemplateOut] = Field(default_factory=list)
     total: int = Field(description="Total count of matching template records")
-

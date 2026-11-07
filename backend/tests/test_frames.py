@@ -167,4 +167,3 @@ async def test_list_frames_public_access(client: AsyncClient):
     """EP-CAT-02: Frame moldings endpoint is publicly accessible."""
     response = await client.get("/api/v1/frames", headers={})
     assert response.status_code == 200
-

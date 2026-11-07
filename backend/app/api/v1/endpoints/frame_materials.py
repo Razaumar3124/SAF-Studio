@@ -44,4 +44,3 @@ async def list_frame_materials(
         category=category,
         available_only=available_only,
     )
-

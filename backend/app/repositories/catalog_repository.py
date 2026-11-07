@@ -171,4 +171,3 @@ class CatalogRepository:
 
         existing = await self.get_molding_by_sku(molding.sku)
         return existing or molding
-

@@ -43,4 +43,3 @@ class LayoutTemplateInDB(BaseModel):
         arbitrary_types_allowed=True,
         json_encoders={ObjectId: str},
     )
-

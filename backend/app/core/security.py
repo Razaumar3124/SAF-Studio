@@ -134,3 +134,23 @@ def normalize_phone(raw: str, default_country_code: str = "+91") -> str | None:
         return f"+{digits}"
 
     return None
+
+
+def generate_photo_signature(photo_id: str, kind: str, expires_at: int) -> str:
+    """Generate an HMAC-SHA256 signature for secure short-lived media access."""
+    settings = get_settings()
+    message = f"{photo_id}:{kind}:{expires_at}"
+    return hmac.new(
+        settings.SECRET_KEY.encode("utf-8"),
+        message.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:24]
+
+
+def verify_photo_signature(photo_id: str, kind: str, sig: str, expires_at: int) -> bool:
+    """Validate an HMAC-SHA256 photo media signature in constant time."""
+    now_ts = int(datetime.now(UTC).timestamp())
+    if expires_at < now_ts:
+        return False
+    expected = generate_photo_signature(photo_id, kind, expires_at)
+    return constant_time_compare(sig, expected)

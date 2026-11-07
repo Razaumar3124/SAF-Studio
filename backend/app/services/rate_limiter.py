@@ -30,6 +30,14 @@ class InMemoryRateLimiter:
             timestamps.append(now)
             self._requests[key] = timestamps
 
+    def is_allowed(self, key: str, max_attempts: int, window_seconds: int) -> bool:
+        """Check if request is within rate limit; records timestamp if allowed."""
+        try:
+            self.check_rate_limit(key, max_attempts, window_seconds)
+            return True
+        except RateLimitExceededException:
+            return False
+
     def reset(self, key: str) -> None:
         """Clear rate limit entries for a specific key (e.g. after successful login)."""
         with self._lock:

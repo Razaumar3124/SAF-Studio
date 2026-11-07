@@ -14,14 +14,18 @@ from app.core.security import decode_access_token
 from app.db.dependencies import get_db
 from app.models.user import UserInDB
 from app.repositories.catalog_repository import CatalogRepository
+from app.repositories.photo_repository import PhotoRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.template_repository import TemplateRepository
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService
 from app.services.catalog_service import CatalogService
 from app.services.google_auth_service import GoogleAuthService
+from app.services.image_processing_service import ImageProcessingService
+from app.services.photo_service import PhotoService
 from app.services.template_service import TemplateService
 from app.services.token_service import TokenService
+from app.storage.r2_storage import R2Storage
 
 # Bearer token extractor
 _bearer_security = HTTPBearer(auto_error=False)
@@ -133,6 +137,55 @@ async def get_template_service(
     return TemplateService(template_repo=template_repo)
 
 
+async def get_optional_current_user(
+    auth: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_security)],
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+) -> UserInDB | None:
+    """Extract authenticated user if Bearer token present, else return None without error."""
+    if not auth or not auth.credentials:
+        return None
+    try:
+        payload = decode_access_token(auth.credentials)
+        user_id = payload.get("sub")
+        if user_id:
+            user = await user_repo.get_by_id(user_id)
+            if user and user.is_active:
+                return user
+    except Exception:
+        return None
+    return None
+
+
+async def get_photo_repository(
+    db: Annotated[AsyncDatabase, Depends(get_db)],
+) -> PhotoRepository:
+    """Dependency for PhotoRepository."""
+    return PhotoRepository(db)
+
+
+async def get_image_processing_service() -> ImageProcessingService:
+    """Dependency for ImageProcessingService."""
+    return ImageProcessingService()
+
+
+async def get_r2_storage() -> R2Storage:
+    """Dependency for Cloudflare R2 storage client."""
+    return R2Storage()
+
+
+async def get_photo_service(
+    photo_repo: Annotated[PhotoRepository, Depends(get_photo_repository)],
+    image_service: Annotated[ImageProcessingService, Depends(get_image_processing_service)],
+    r2_storage: Annotated[R2Storage, Depends(get_r2_storage)],
+) -> PhotoService:
+    """Dependency for PhotoService."""
+    return PhotoService(
+        photo_repo=photo_repo,
+        image_service=image_service,
+        r2_storage=r2_storage,
+    )
+
+
 # Type aliases for clean endpoint injections
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DatabaseDep = Annotated[AsyncDatabase, Depends(get_db)]
@@ -140,9 +193,14 @@ UserRepoDep = Annotated[UserRepository, Depends(get_user_repository)]
 SessionRepoDep = Annotated[SessionRepository, Depends(get_session_repository)]
 CatalogRepoDep = Annotated[CatalogRepository, Depends(get_catalog_repository)]
 TemplateRepoDep = Annotated[TemplateRepository, Depends(get_template_repository)]
+PhotoRepoDep = Annotated[PhotoRepository, Depends(get_photo_repository)]
+ImageProcessingServiceDep = Annotated[ImageProcessingService, Depends(get_image_processing_service)]
+R2StorageDep = Annotated[R2Storage, Depends(get_r2_storage)]
+PhotoServiceDep = Annotated[PhotoService, Depends(get_photo_service)]
 TokenServiceDep = Annotated[TokenService, Depends(get_token_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 GoogleAuthServiceDep = Annotated[GoogleAuthService, Depends(get_google_auth_service)]
 CatalogServiceDep = Annotated[CatalogService, Depends(get_catalog_service)]
 TemplateServiceDep = Annotated[TemplateService, Depends(get_template_service)]
 CurrentUserDep = Annotated[UserInDB, Depends(get_current_user)]
+OptionalCurrentUserDep = Annotated[UserInDB | None, Depends(get_optional_current_user)]

@@ -380,3 +380,117 @@ def populate_fake_catalog(
         doc = tmpl.model_dump(by_alias=True)
         doc["_id"] = tmpl_id
         fake_template_repo.templates[tmpl_id] = doc
+
+
+class FakePhotoRepository:
+    """In-memory photo repository simulating MongoDB photos collection."""
+
+    def __init__(self) -> None:
+        self.photos: dict[str, dict] = {}
+
+    async def create_indexes(self) -> None:
+        pass
+
+    async def create(self, photo):
+        doc = photo.model_dump(by_alias=True)
+        doc["_id"] = str(photo.id)
+        self.photos[str(photo.id)] = doc
+        return photo
+
+    async def get_by_id(self, photo_id: str, include_deleted: bool = False):
+        from app.models.photo import PhotoInDB
+
+        doc = self.photos.get(str(photo_id))
+        if not doc:
+            return None
+        if not include_deleted and doc.get("is_deleted", False):
+            return None
+        return PhotoInDB(**doc)
+
+    async def list_by_user(
+        self,
+        user_id: str,
+        page: int = 1,
+        page_size: int = 50,
+    ):
+        from app.models.photo import PhotoInDB
+
+        all_user_photos = [
+            PhotoInDB(**d)
+            for d in self.photos.values()
+            if str(d.get("user_id")) == str(user_id) and not d.get("is_deleted", False)
+        ]
+        all_user_photos.sort(key=lambda p: p.created_at, reverse=True)
+        total = len(all_user_photos)
+        skip = max(0, (page - 1) * page_size)
+        items = all_user_photos[skip : skip + page_size]
+        return items, total
+
+    async def soft_delete(self, photo_id: str, user_id: str) -> bool:
+        doc = self.photos.get(str(photo_id))
+        if not doc:
+            return False
+        if str(doc.get("user_id")) != str(user_id):
+            return False
+        if doc.get("is_deleted", False):
+            return False
+        doc["is_deleted"] = True
+        doc["updated_at"] = datetime.now(UTC)
+        return True
+
+    async def hard_delete(self, photo_id: str) -> bool:
+        return self.photos.pop(str(photo_id), None) is not None
+
+
+class FakeR2Storage:
+    """In-memory mock Cloudflare R2 object storage."""
+
+    def __init__(self) -> None:
+        self.objects: dict[str, tuple[bytes, str, dict]] = {}
+        self.bucket_name = "saf-studio-photos-test"
+        self.should_fail_upload = False
+        self.should_fail_download = False
+
+    async def put_object(
+        self,
+        key: str,
+        data: bytes,
+        content_type: str,
+        metadata: dict[str, str] | None = None,
+    ) -> str:
+        from app.core.exceptions import StorageUnavailableException
+
+        if self.should_fail_upload:
+            raise StorageUnavailableException(issue="Simulated R2 network failure on upload")
+
+        self.objects[key] = (data, content_type, metadata or {})
+        return key
+
+    async def get_object(self, key: str) -> tuple[bytes, str]:
+        from app.core.exceptions import (
+            ResourceNotFoundException,
+            StorageUnavailableException,
+        )
+
+        if self.should_fail_download:
+            raise StorageUnavailableException(issue="Simulated R2 network failure on download")
+
+        if key not in self.objects:
+            raise ResourceNotFoundException(
+                message=f"Photo media for key '{key}' not found in storage.",
+                field="key",
+            )
+        data, c_type, _ = self.objects[key]
+        return data, c_type
+
+    async def delete_object(self, key: str) -> bool:
+        return self.objects.pop(key, None) is not None
+
+    async def delete_objects(self, keys: list[str]) -> None:
+        for k in keys:
+            self.objects.pop(k, None)
+
+    async def generate_presigned_url(self, key: str, expires_in: int = 3600) -> str:
+        return (
+            f"https://mock-r2.cloudflarestorage.com/{self.bucket_name}/{key}?expires={expires_in}"
+        )

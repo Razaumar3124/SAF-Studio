@@ -53,4 +53,3 @@ async def list_templates(
         min_frames=min_frames,
         max_frames=max_frames,
     )
-

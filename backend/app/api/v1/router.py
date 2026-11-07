@@ -1,6 +1,13 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, frame_materials, frames, health, templates
+from app.api.v1.endpoints import (
+    auth,
+    frame_materials,
+    frames,
+    health,
+    photos,
+    templates,
+)
 
 api_v1_router = APIRouter()
 
@@ -14,3 +21,6 @@ api_v1_router.include_router(auth.router)
 api_v1_router.include_router(frame_materials.router)
 api_v1_router.include_router(frames.router)
 api_v1_router.include_router(templates.router)
+
+# Register Phase 4 endpoints
+api_v1_router.include_router(photos.router)

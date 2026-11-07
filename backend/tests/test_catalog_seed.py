@@ -137,4 +137,3 @@ async def test_catalog_molding_references_valid_materials(
     assert len(moldings) >= 4
     for molding in moldings:
         assert str(molding.material_id) in material_ids
-

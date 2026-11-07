@@ -104,6 +104,60 @@ class Settings(BaseSettings):
         default=300,
         description="Time window in seconds for registration rate limiting",
     )
+    RATE_LIMIT_PHOTO_UPLOAD_MAX_ATTEMPTS: int = Field(
+        default=30,
+        description="Maximum photo uploads allowed per user/IP per hour",
+    )
+    RATE_LIMIT_PHOTO_UPLOAD_WINDOW_SECONDS: int = Field(
+        default=3600,
+        description="Time window in seconds for photo upload rate limiting",
+    )
+
+    # Cloudflare R2 Object Storage
+    R2_ACCOUNT_ID: str = Field(
+        default="",
+        description="Cloudflare Account ID for R2 storage",
+    )
+    R2_ACCESS_KEY_ID: str = Field(
+        default="",
+        description="Cloudflare R2 Access Key ID",
+    )
+    R2_SECRET_ACCESS_KEY: str = Field(
+        default="",
+        description="Cloudflare R2 Secret Access Key",
+    )
+    R2_BUCKET_NAME: str = Field(
+        default="saf-studio-photos",
+        description="Private Cloudflare R2 bucket name for customer photographs",
+    )
+    R2_CUSTOM_DOMAIN: str = Field(
+        default="",
+        description="Optional public custom domain for public assets",
+    )
+    R2_ENDPOINT_URL: str = Field(
+        default="",
+        description="Explicit S3 endpoint URL override (defaults to Cloudflare R2 standard)",
+    )
+    R2_MAX_UPLOAD_MB: int = Field(
+        default=25,
+        description="Maximum allowed photo upload size in megabytes",
+    )
+    PHOTO_MAX_WIDTH_PX: int = Field(
+        default=8192,
+        description="Maximum allowed image width in pixels",
+    )
+    PHOTO_MAX_HEIGHT_PX: int = Field(
+        default=8192,
+        description="Maximum allowed image height in pixels",
+    )
+    PHOTO_MIN_SIDE_PX: int = Field(
+        default=300,
+        description="Minimum allowed image side dimension in pixels for quality printing",
+    )
+    PHOTO_SIGNED_URL_EXPIRATION_SECONDS: int = Field(
+        default=86400,
+        description="Validity lifetime in seconds for photo thumbnail and preview HMAC signatures",
+    )
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -122,6 +176,20 @@ class Settings(BaseSettings):
         if env == "production" and ("*" in v or not v):
             raise ValueError("Wildcard or empty CORS_ORIGINS is forbidden in production")
         return v
+
+    @property
+    def r2_effective_endpoint_url(self) -> str:
+        """Construct the S3-compatible endpoint URL for Cloudflare R2."""
+        if self.R2_ENDPOINT_URL:
+            return self.R2_ENDPOINT_URL
+        if self.R2_ACCOUNT_ID:
+            return f"https://{self.R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+        return "https://mock-account.r2.cloudflarestorage.com"
+
+    @property
+    def max_upload_bytes(self) -> int:
+        """Maximum allowed upload size in bytes."""
+        return self.R2_MAX_UPLOAD_MB * 1024 * 1024
 
     @property
     def is_production(self) -> bool:

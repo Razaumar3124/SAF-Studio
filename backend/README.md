@@ -282,9 +282,45 @@ python -m app.db.seed_catalog --overwrite
 
 ---
 
+## Photo Management & Cloudflare R2 Storage (Phase 4)
+
+Phase 4 implements user photograph upload, Pillow-driven validation and optimization, Cloudflare R2 cloud object storage via `boto3`, MongoDB metadata tracking, and secure signed media streaming conforming to `EP-PHOTO-01` through `EP-PHOTO-05`.
+
+### Endpoints Overview
+
+| Method | Endpoint | Description | Auth Required |
+|---|---|---|---|
+| `POST` | `/api/v1/photos/upload` | Upload JPEG/PNG/WebP, EXIF auto-rotate, WebP preview (1600px) & thumbnail (300px), store in R2 & MongoDB | Bearer Token |
+| `GET` | `/api/v1/photos` | Paginated listing of user's active photos with short-lived HMAC signed thumbnail & preview URLs | Bearer Token |
+| `GET` | `/api/v1/photos/{id}/thumbnail` | Stream 300px WebP thumbnail via short-lived HMAC signature (`?sig=...&exp=...`) or Bearer token | Signed URL / Bearer |
+| `GET` | `/api/v1/photos/{id}/preview` | Stream 1600px WebP preview via short-lived HMAC signature (`?sig=...&exp=...`) or Bearer token | Signed URL / Bearer |
+| `DELETE` | `/api/v1/photos/{id}` | IDOR-safe photo deletion: marks `is_deleted=True` in MongoDB and purges binary objects from R2 | Bearer Token |
+
+### Security & Storage Architecture
+
+1. **Pillow Image Sanitization & Validation:**
+   - Content sniffing via magic bytes (`image/jpeg`, `image/png`, `image/webp`).
+   - Rejection of decompression bombs (`Image.MAX_IMAGE_PIXELS = 100_000_000`).
+   - EXIF `Orientation` tag auto-rotation and metadata stripping.
+   - Dimension validation: Minimum 300x300 px, maximum 8192x8192 px, max 25 MB.
+2. **Cloudflare R2 Object Storage (`boto3`):**
+   - Hierarchical keys: `users/{user_id}/photos/{photo_id}/original.ext`, `preview.webp`, `thumbnail.webp`.
+   - Asynchronous threadpool execution (`asyncio.to_thread`) for non-blocking I/O.
+   - Atomic rollback: If any R2 upload or MongoDB persistence step fails, partially uploaded R2 objects are cleaned up immediately.
+3. **Short-Lived HMAC Signed URLs:**
+   - Media streaming endpoints (`/thumbnail`, `/preview`) generate SHA-256 HMAC tokens over `photo_id:kind:expires_at` signed with `SECRET_KEY`.
+   - Prevents unauthorized hotlinking while allowing frontend `<img src="...">` rendering without sending Authorization headers in DOM requests.
+4. **Ownership Isolation (IDOR Protection):**
+   - All write and read operations verify `user_id == current_user.id` or valid signature.
+   - Cross-tenant access attempts return `403 Forbidden` or `404 Not Found` without disclosing resource existence.
+5. **Rate Limiting:**
+   - Sliding-window rate limiter limits photo uploads to 30 uploads per hour per user.
+
+---
+
 ## Status & Test Suite
 
-The automated test suite contains **84 passing tests** across Phases 1, 2, and 3:
+The automated test suite contains **114 passing tests** across Phases 1, 2, 3, and 4:
 - `tests/test_health.py` (Liveness, readiness, DB down simulation)
 - `tests/test_config.py` (CORS policies, masking, environment handling)
 - `tests/test_errors.py` (RFC error envelope normalization)
@@ -298,8 +334,14 @@ The automated test suite contains **84 passing tests** across Phases 1, 2, and 3
 - `tests/test_frames.py` (Molding profiles, M8 hex swatches, material filtering, width ranges, validation)
 - `tests/test_templates.py` (Template listing, slot geometries, category filtering, frame count range, ordering)
 - `tests/test_catalog_seed.py` (Idempotent repeated seeding, non-overwrite protection, reference integrity)
+- `tests/test_image_processing.py` (Pillow verification, MIME sniffing, WebP generation, decompression bomb defense)
+- `tests/test_r2_storage.py` (R2 client upload, download, batch delete, 503 simulation)
+- `tests/test_photo_upload.py` (Photo upload endpoint, validation, rate limiting, R2 failure rollback)
+- `tests/test_photo_listing.py` (Photo listing endpoint, pagination, ownership isolation)
+- `tests/test_photo_access.py` (HMAC signed URL access, expiration, tampering checks, Bearer auth)
+- `tests/test_photo_delete.py` (Soft deletion, R2 object cleanup, IDOR protection)
 
 All code passes `ruff check .` and `ruff format --check .` with zero errors.
 
-Phase 4 is prepared to introduce **Photograph Management & Storage** (`/api/v1/photos/*`).
+Phase 5 is prepared to introduce **Geometry & Layout Engine** (`/api/v1/layouts/*`).
 

@@ -59,4 +59,3 @@ async def list_frames(
         min_width=min_width,
         max_width=max_width,
     )
-

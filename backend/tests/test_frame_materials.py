@@ -104,4 +104,3 @@ async def test_list_materials_public_access(client: AsyncClient):
     """EP-CAT-01: Endpoint is completely public and requires no Bearer token."""
     response = await client.get("/api/v1/frame-materials", headers={})
     assert response.status_code == 200
-

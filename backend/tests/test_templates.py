@@ -184,4 +184,3 @@ async def test_list_templates_public_access(client: AsyncClient):
     """EP-TMPL-01: Templates endpoint is publicly accessible."""
     response = await client.get("/api/v1/templates", headers={})
     assert response.status_code == 200
-
