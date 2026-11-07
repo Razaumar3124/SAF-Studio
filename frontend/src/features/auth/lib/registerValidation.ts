@@ -55,7 +55,7 @@ export function validateRegisterField(field: RegisterField, value: string): stri
       return undefined
     case 'password':
       if (!value) return 'Create a password.'
-      if (value.length < PASSWORD_MIN_LENGTH || !/\p{L}/u.test(value) || !/\d/.test(value))
+      if (value.length < PASSWORD_MIN_LENGTH || !/[A-Za-z]/.test(value) || !/\d/.test(value))
         return PASSWORD_HINT
       if (value.length > PASSWORD_MAX_LENGTH)
         return `Password must be ${PASSWORD_MAX_LENGTH} characters or fewer.`

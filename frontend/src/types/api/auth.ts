@@ -53,6 +53,13 @@ export type RegisterResponse = AuthResponse<User>
 export type LoginResponse = AuthResponse<LoginUser>
 export type MeResponse = User
 
+/** POST /auth/google */
+export interface GoogleAuthRequest {
+  id_token: string
+}
+
+export type GoogleAuthResponse = AuthResponse<User>
+
 /** POST /auth/forgot-password */
 export interface ForgotPasswordRequest {
   email: string

@@ -8,7 +8,7 @@
  * example uses an ObjectId string. Kept as a single alias so the switch is a one-line change.
  * Open question Q1 in docs/API_ALIGNMENT.md.
  */
-export type EntityId = number
+export type EntityId = number | string
 
 /** ISO-8601 UTC timestamp, e.g. `2026-11-01T22:45:00.000Z`. */
 export type ISODateTime = string

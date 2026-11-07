@@ -22,6 +22,8 @@ interface AuthFormProps {
    * fluid tokens, which AuthLayout's `data-compact` already tightens for Register.
    */
   compact?: boolean
+  /** Google SSO action context ('register' activates GIS flow; 'login' shows placeholder). */
+  googleAction?: 'register' | 'login'
   /** The fields. */
   children: ReactNode
 }
@@ -38,6 +40,7 @@ export function AuthForm({
   submitLabel,
   submittingLabel,
   submitVariant = 'primary-gradient',
+  googleAction = 'login',
   children,
 }: AuthFormProps) {
   return (
@@ -74,7 +77,7 @@ export function AuthForm({
 
       <Divider label="Or" />
 
-      <GoogleSignIn />
+      <GoogleSignIn action={googleAction} />
     </div>
   )
 }

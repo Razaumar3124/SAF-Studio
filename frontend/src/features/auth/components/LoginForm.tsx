@@ -18,6 +18,7 @@ export function LoginForm() {
       submitting={submitting}
       submitLabel="Sign In"
       submittingLabel="Signing in…"
+      googleAction="login"
     >
       <TextField
         {...field('identifier')}

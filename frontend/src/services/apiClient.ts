@@ -194,6 +194,7 @@ export async function apiRequest<T>(
       ...init,
       method,
       headers: requestHeaders,
+      credentials: init.credentials ?? 'include',
       body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
     })
   } catch (cause) {

@@ -10,6 +10,7 @@ export const endpoints = {
   auth: {
     register: '/auth/register', // POST  · public
     login: '/auth/login', // POST  · public
+    google: '/auth/google', // POST  · public
     me: '/auth/me', // GET   · bearer
     forgotPassword: '/auth/forgot-password', // POST · public
     verifyOtp: '/auth/forgot-password/verify', // POST · public

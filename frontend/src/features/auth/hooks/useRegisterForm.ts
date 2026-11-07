@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import { ROUTES } from '@/config/routes'
 import { useForm } from '@/hooks/useForm'
-import { mockRegister } from '../lib/mockAuth'
+import { register } from '@/services/authApi'
+import { tokenStorage } from '@/services/tokenStorage'
 import {
   mapRegisterError,
   REGISTER_FIELDS,
@@ -20,8 +21,10 @@ export function useRegisterForm() {
     validateField: (field, value) => validateRegisterField(field, value),
     mapSubmitError: mapRegisterError,
     onSubmit: async (values, signal) => {
-      // TODO(Phase 5): swap mockRegister for services/auth.register (same signature) + store tokens.
-      await mockRegister(toRegisterRequest(values), signal)
+      const response = await register(toRegisterRequest(values), signal)
+      if (response?.tokens) {
+        tokenStorage.save(response.tokens)
+      }
       navigate(ROUTES.memoryWall, { replace: true })
     },
   })

@@ -30,6 +30,7 @@ export function RegisterForm() {
       submittingLabel="Creating account…"
       submitVariant="primary-gradient"
       compact
+      googleAction="register"
     >
       <TextField
         {...field('fullName')}
