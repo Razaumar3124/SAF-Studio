@@ -177,6 +177,22 @@ async def test_get_shared_report_expired_token_returns_404(
 
 
 @pytest.mark.asyncio
+async def test_get_shared_report_with_naive_datetime(
+    client: AsyncClient,
+    sample_quote: tuple[dict, str, QuoteInDB, str],
+    fake_quote_repo: FakeQuoteRepository,
+):
+    """Ensure report loading succeeds when MongoDB deserializes dates as offset-naive datetimes."""
+    _, _, quote, raw_token = sample_quote
+    # Strip tzinfo to simulate PyMongo BSON date deserialization
+    naive_expiry = quote.expires_at.replace(tzinfo=None)
+    fake_quote_repo.quotes[str(quote.id)]["expires_at"] = naive_expiry
+
+    response = await client.get(f"/api/v1/quotes/share/{raw_token}")
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_redirect_root_share_url(
     client: AsyncClient,
     sample_quote: tuple[dict, str, QuoteInDB, str],

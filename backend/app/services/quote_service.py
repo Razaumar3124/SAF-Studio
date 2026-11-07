@@ -428,7 +428,12 @@ class QuoteService:
 
         # Check expiration
         now = datetime.now(UTC)
-        if now > quote.expires_at:
+        quote_expires_at = (
+            quote.expires_at
+            if quote.expires_at.tzinfo
+            else quote.expires_at.replace(tzinfo=UTC)
+        )
+        if now > quote_expires_at:
             raise ResourceNotFoundException(
                 message="This design report share link has expired.",
                 field="token",

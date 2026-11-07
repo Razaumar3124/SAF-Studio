@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from bson import ObjectId
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator
 
 
 def validate_object_id(v: Any) -> str:
@@ -111,6 +111,14 @@ class QuoteInDB(BaseModel):
     expires_at: datetime = Field(description="UTC timestamp after which share link is invalid")
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @field_validator("expires_at", "created_at", "updated_at", mode="after")
+    @classmethod
+    def ensure_utc(cls, v: datetime | None) -> datetime | None:
+        """Ensure datetimes deserialized from MongoDB without tzinfo are timezone-aware UTC."""
+        if v is not None and v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v
 
     model_config = ConfigDict(
         populate_by_name=True,
