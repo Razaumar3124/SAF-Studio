@@ -10,11 +10,11 @@ import {
 } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/app/providers/AuthProvider'
 import { memoryWallAssets } from '@/assets/memoryWall'
 import { BrandBar } from '@/components/brand/BrandBar'
 import { ROUTES } from '@/config/routes'
 import { cn } from '@/lib/cn'
-import { tokenStorage } from '@/services/tokenStorage'
 
 const STEPS: ReadonlyArray<{ icon: ReactNode; title: string; text: string }> = [
   { icon: <PanelsTopLeft />, title: 'Wall Setup', text: 'Set your wall size and preferences' },
@@ -100,6 +100,7 @@ function ProfileMenu({ onOpenSaved }: { onOpenSaved: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const navigate = useNavigate()
+  const { user, logout } = useAuth()
 
   useEffect(() => {
     if (!open) return
@@ -167,7 +168,7 @@ function ProfileMenu({ onOpenSaved }: { onOpenSaved: () => void }) {
           className="absolute top-full right-0 z-50 mt-2 w-60 animate-[toast-in_160ms_ease-out] rounded-xl border border-line bg-surface p-1.5 shadow-float"
         >
           <p className="px-3 pt-2 pb-2.5 text-xs text-ink-500">
-            Signed in · <span className="font-medium text-ink-700">Preview account</span>
+            Signed in · <span className="font-medium text-ink-700">{user?.full_name || 'Customer'}</span>
           </p>
           <button
             type="button"
@@ -184,9 +185,8 @@ function ProfileMenu({ onOpenSaved }: { onOpenSaved: () => void }) {
             type="button"
             role="menuitem"
             className={item}
-            onClick={() => {
-              // Local sign-out now; Phase 5 also calls POST /auth/logout first.
-              tokenStorage.clear()
+            onClick={async () => {
+              await logout()
               navigate(ROUTES.login, { replace: true })
             }}
           >

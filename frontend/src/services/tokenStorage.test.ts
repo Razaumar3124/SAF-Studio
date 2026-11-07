@@ -19,15 +19,18 @@ describe('tokenStorage', () => {
     vi.useRealTimers()
   })
 
-  it('saves, reads and clears a session', async () => {
+  it('saves, reads and clears a session with in-memory access token and httpOnly refresh', async () => {
     const { tokenStorage, storage } = await load()
     tokenStorage.save(tokens)
     expect(tokenStorage.getAccessToken()).toBe('acc')
-    expect(tokenStorage.getRefreshToken()).toBe('ref')
-    expect(storage.getItem(KEY)).not.toBeNull()
+    // Refresh tokens are never exposed in JavaScript memory (stored in httpOnly cookie)
+    expect(tokenStorage.getRefreshToken()).toBeNull()
+    // Sensitive JWT tokens are NEVER persisted to localStorage
+    expect(storage.getItem(KEY)).toBeNull()
+    expect(storage.getItem('saf.has_session')).toBe('1')
     tokenStorage.clear()
     expect(tokenStorage.hasSession()).toBe(false)
-    expect(storage.getItem(KEY)).toBeNull()
+    expect(storage.getItem('saf.has_session')).toBeNull()
   })
 
   it('does not return an expired access token but still reports the session', async () => {

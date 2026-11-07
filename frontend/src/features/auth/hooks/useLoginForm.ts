@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '@/app/providers/AuthProvider'
 import { ROUTES } from '@/config/routes'
 import { useForm } from '@/hooks/useForm'
 import {
@@ -8,11 +9,12 @@ import {
   toLoginRequest,
   validateLoginField,
 } from '../lib/loginValidation'
-import { mockLogin } from '../lib/mockAuth'
 
 /** Login form: generic form behaviour from `useForm` + login rules, payload and error mapping. */
 export function useLoginForm() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { login } = useAuth()
 
   return useForm({
     fields: LOGIN_FIELDS,
@@ -20,9 +22,13 @@ export function useLoginForm() {
     validateField: (field, value) => validateLoginField(field, value),
     mapSubmitError: mapLoginError,
     onSubmit: async (values, signal) => {
-      // TODO(Phase 5): swap mockLogin for services/auth.login (same signature) + store tokens.
-      await mockLogin(toLoginRequest(values), signal)
-      navigate(ROUTES.memoryWall, { replace: true })
+      await login(toLoginRequest(values), signal)
+      const from = (location.state as { from?: string } | null)?.from
+      const target =
+        from && typeof from === 'string' && from.startsWith('/') && !from.startsWith('/login')
+          ? from
+          : ROUTES.memoryWall
+      navigate(target, { replace: true })
     },
   })
 }

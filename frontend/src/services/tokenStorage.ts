@@ -1,108 +1,167 @@
 import type { AuthTokens } from '@/types/api'
 
 /**
- * Persists the JWTs returned by /auth/register and /auth/login.
+ * Manages JWT access token in memory and tracks session persistence.
  *
- * The contract returns tokens in the response body (no httpOnly cookie), so they have to live
- * in JS-readable storage. We use localStorage so a page reload doesn't sign the user out (there is
- * no refresh endpoint yet, see API_ALIGNMENT.md Q2/Q3). The tradeoff: tokens are exposed to XSS.
- * Everything goes through this module, so moving to cookies later is a change in one file.
+ * Security architecture:
+ * - Access tokens are short-lived and kept STRICTLY IN MEMORY (module scope).
+ *   They are never persisted to localStorage or sessionStorage, mitigating XSS token theft.
+ * - Refresh tokens are long-lived and managed exclusively via secure httpOnly cookies
+ *   set by the backend (SameSite=Lax, Path=/api/v1/auth). They are inaccessible to JS.
+ * - Only a non-sensitive boolean indicator (`saf.has_session`) is recorded in localStorage
+ *   so that page reloads know to trigger silent refresh via POST /api/v1/auth/refresh.
  */
 
-const STORAGE_KEY = 'saf.auth'
+const SESSION_FLAG_KEY = 'saf.has_session'
+const LEGACY_STORAGE_KEY = 'saf.auth'
 
-interface StoredSession {
+interface InMemorySession {
   accessToken: string
-  refreshToken: string
   /** Epoch ms when the access token expires. */
   expiresAt: number
 }
 
-let cache: StoredSession | null | undefined
+let inMemorySession: InMemorySession | null = null
 
-// Another tab signed in or out (or cleared storage): drop the in-memory copy so this tab re-reads
-// storage on next use instead of sending a token that was revoked elsewhere. `storage` events only
-// fire in other tabs, so this tab's own writes are unaffected.
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (event) => {
-    if (event.key === STORAGE_KEY || event.key === null) cache = undefined
-  })
-}
-
-/** localStorage is user-editable: never trust its shape. */
-function isStoredSession(value: unknown): value is StoredSession {
-  if (typeof value !== 'object' || value === null) return false
+function isStoredSession(value: unknown): value is { accessToken: string; expiresAt: number } {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const v = value as Record<string, unknown>
   return (
     typeof v.accessToken === 'string' &&
     v.accessToken.length > 0 &&
-    typeof v.refreshToken === 'string' &&
     typeof v.expiresAt === 'number' &&
     Number.isFinite(v.expiresAt)
   )
 }
 
-function read(): StoredSession | null {
-  if (cache !== undefined) return cache
+function readSession(): InMemorySession | null {
+  if (inMemorySession !== null) return inMemorySession
+
   let raw: string | null = null
   try {
-    raw = localStorage.getItem(STORAGE_KEY)
-    const parsed: unknown = raw ? JSON.parse(raw) : null
-    cache = isStoredSession(parsed) ? parsed : null
+    raw = localStorage.getItem(LEGACY_STORAGE_KEY)
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw)
+      if (isStoredSession(parsed)) {
+        inMemorySession = {
+          accessToken: parsed.accessToken,
+          expiresAt: parsed.expiresAt,
+        }
+        localStorage.removeItem(LEGACY_STORAGE_KEY)
+        localStorage.setItem(SESSION_FLAG_KEY, '1')
+        return inMemorySession
+      }
+    }
   } catch {
-    cache = null
+    // Parsing failed
   }
-  // Drop corrupted or tampered entries (bad JSON or wrong shape) so they can't linger.
-  if (raw && !cache) {
+
+  // Drop corrupted, non-object or invalid legacy entries so they can't linger
+  if (raw && !inMemorySession) {
     try {
-      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(LEGACY_STORAGE_KEY)
     } catch {
-      // Storage unavailable: nothing to clean up.
+      // Storage unavailable
     }
   }
-  return cache
+
+  return inMemorySession
+}
+
+// Another tab signed out or cleared storage: clear in-memory session
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key === SESSION_FLAG_KEY || event.key === LEGACY_STORAGE_KEY || event.key === null) {
+      if (!event.newValue || event.key === null) {
+        inMemorySession = null
+        try {
+          localStorage.removeItem(SESSION_FLAG_KEY)
+        } catch {
+          // ignore
+        }
+      } else if (event.key === LEGACY_STORAGE_KEY && event.newValue) {
+        try {
+          const parsed: unknown = JSON.parse(event.newValue)
+          if (isStoredSession(parsed)) {
+            inMemorySession = {
+              accessToken: parsed.accessToken,
+              expiresAt: parsed.expiresAt,
+            }
+            return
+          }
+        } catch {
+          // ignore
+        }
+        inMemorySession = null
+      }
+    }
+  })
 }
 
 export const tokenStorage = {
   save(tokens: AuthTokens) {
-    // A missing/garbled expires_in must not produce NaN (NaN comparisons would never expire).
     const lifetimeSeconds =
       Number.isFinite(tokens.expires_in) && tokens.expires_in > 0 ? tokens.expires_in : 0
-    cache = {
+    inMemorySession = {
       accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
       expiresAt: Date.now() + lifetimeSeconds * 1000,
     }
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cache))
+      localStorage.setItem(SESSION_FLAG_KEY, '1')
+      localStorage.removeItem(LEGACY_STORAGE_KEY)
     } catch {
-      // Storage blocked (private mode etc.) — session stays in memory for this tab.
+      // Storage blocked (private browsing mode) - session stays in memory for this tab
     }
   },
 
-  /** Returns the access token, or null if missing/expired. */
+  /** Returns the access token, or null if missing or expired. */
   getAccessToken(): string | null {
-    const session = read()
+    const session = readSession()
     if (!session) return null
     if (Date.now() >= session.expiresAt) return null
     return session.accessToken
   },
 
-  /** True if the user signed in at some point, even if the access token has since expired. */
+  /** True if an active session exists or was flagged in storage for silent refresh. */
   hasSession(): boolean {
-    return read() !== null
+    const session = readSession()
+    if (session && Date.now() < session.expiresAt) return true
+    try {
+      return localStorage.getItem(SESSION_FLAG_KEY) === '1'
+    } catch {
+      return false
+    }
   },
 
+  /**
+   * Refresh tokens are stored exclusively in secure httpOnly cookies.
+   * This method returns null to ensure refresh tokens are never held in JS memory.
+   */
   getRefreshToken(): string | null {
-    return read()?.refreshToken ?? null
+    return null
+  },
+
+  setAccessToken(token: string, expiresInSeconds: number) {
+    const lifetimeSeconds =
+      Number.isFinite(expiresInSeconds) && expiresInSeconds > 0 ? expiresInSeconds : 0
+    inMemorySession = {
+      accessToken: token,
+      expiresAt: Date.now() + lifetimeSeconds * 1000,
+    }
+    try {
+      localStorage.setItem(SESSION_FLAG_KEY, '1')
+    } catch {
+      // Storage blocked
+    }
   },
 
   clear() {
-    cache = null
+    inMemorySession = null
     try {
-      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(SESSION_FLAG_KEY)
+      localStorage.removeItem(LEGACY_STORAGE_KEY)
     } catch {
-      // ignore
+      // Storage blocked
     }
   },
 }

@@ -388,7 +388,6 @@ class AuthService:
 
         return ResetPasswordResponse(
             message=(
-                "Your password has been successfully reset. "
-                "Please sign in with your new password."
+                "Your password has been successfully reset. Please sign in with your new password."
             )
         )

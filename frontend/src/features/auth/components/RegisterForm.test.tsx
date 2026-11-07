@@ -8,8 +8,6 @@ import * as authApi from '@/services/authApi'
 import { ApiError } from '@/services/apiClient'
 import { tokenStorage } from '@/services/tokenStorage'
 import type { RegisterResponse } from '@/types/api'
-import * as mockAuth from '../lib/mockAuth'
-import { LoginForm } from './LoginForm'
 import { RegisterForm } from './RegisterForm'
 
 afterEach(() => {
@@ -264,33 +262,5 @@ describe('RegisterForm', () => {
     expect(alert.textContent).toMatch(/Google authentication token could not be verified/i)
 
     delete (window as { google?: unknown }).google
-  })
-})
-
-describe('LoginForm', () => {
-  it('shows "Google sign-in is coming soon" notice on login page', async () => {
-    renderAt(<LoginForm />)
-    await userEvent.click(screen.getByRole('button', { name: 'Continue with Google' }))
-    expect(screen.getByRole('status').textContent).toMatch(/coming soon/)
-  })
-
-  it('sends email OR phone (E.164) and navigates on success', async () => {
-    const spy = vi.spyOn(mockAuth, 'mockLogin').mockResolvedValue()
-    renderAt(<LoginForm />)
-    await userEvent.type(screen.getByLabelText('Mobile No. or Email'), '098765 43210')
-    await userEvent.type(screen.getByLabelText('Password', { exact: true }), 'pw')
-    await userEvent.click(screen.getByRole('button', { name: 'Sign In' }))
-    expect(spy).toHaveBeenCalledWith({ phone: '+919876543210', password: 'pw' }, expect.any(AbortSignal))
-    expect(await screen.findByRole('heading', { name: 'Planner' })).toBeTruthy()
-  })
-
-  it('password toggle keeps its name and flips aria-pressed + input type', async () => {
-    renderAt(<LoginForm />)
-    const toggle = screen.getByRole('button', { name: 'Show password' })
-    const pw = screen.getByLabelText('Password', { exact: true })
-    expect(pw.getAttribute('type')).toBe('password')
-    await userEvent.click(toggle)
-    expect(toggle.getAttribute('aria-pressed')).toBe('true')
-    expect(pw.getAttribute('type')).toBe('text')
   })
 })

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '@/app/providers/AuthProvider'
 import { Alert } from '@/components/feedback/Alert'
 import { env } from '@/config/env'
 import { ROUTES } from '@/config/routes'
@@ -10,29 +11,36 @@ import { GoogleButton } from './GoogleButton'
 export interface GoogleSignInProps {
   /**
    * Action context:
-   * - 'register': Google SSO active (for Register page).
-   * - 'login': placeholder notice (Login page, deferred to next phase).
+   * - 'register': user onboarding flow.
+   * - 'login': returning user authentication flow.
    */
   action?: 'register' | 'login'
 }
 
 /**
- * "Continue with Google".
- * - On Register page (action="register"): Google Identity Services flow → POST /api/v1/auth/google.
- * - On Login page (action="login"): shows the placeholder notice.
+ * "Continue with Google" Single Sign-On (SSO).
+ * Supports both Login and Register via official Google Identity Services (GIS)
+ * and POST /api/v1/auth/google.
  */
 export function GoogleSignIn({ action = 'login' }: GoogleSignInProps) {
   const navigate = useNavigate()
-  const [showNotice, setShowNotice] = useState(false)
+  const location = useLocation()
+  const { refreshUser } = useAuth()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasRenderedIframe, setHasRenderedIframe] = useState(false)
   const buttonContainerRef = useRef<HTMLDivElement>(null)
+  const inFlightRef = useRef(false)
 
   const isRegister = action === 'register'
+  const loadingText = isRegister ? 'Creating account…' : 'Signing in…'
 
   const handleCredentialSuccess = useCallback(
     async (idToken: string) => {
+      // Prevent duplicate token exchanges if GIS fires multiple callbacks
+      if (inFlightRef.current) return
+      inFlightRef.current = true
+
       setSubmitting(true)
       setError(null)
 
@@ -41,16 +49,38 @@ export function GoogleSignIn({ action = 'login' }: GoogleSignInProps) {
         if (response?.tokens) {
           tokenStorage.save(response.tokens)
         }
-        navigate(ROUTES.memoryWall, { replace: true })
+        await refreshUser()
+
+        const from = (location.state as { from?: string } | null)?.from
+        const target =
+          from && typeof from === 'string' && from.startsWith('/') && !from.startsWith('/login')
+            ? from
+            : ROUTES.memoryWall
+        navigate(target, { replace: true })
       } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : 'Google registration failed. Please try again.'
+        let message = isRegister
+          ? 'Google registration failed. Please try again.'
+          : 'Google sign-in failed. Please try again.'
+
+        if (err && typeof err === 'object' && 'code' in err) {
+          const apiErr = err as { code?: string; message?: string }
+          if (apiErr.code === 'ACCOUNT_DISABLED') {
+            message = 'This account has been deactivated. Please contact support.'
+          } else if (apiErr.code === 'INVALID_GOOGLE_TOKEN') {
+            message = apiErr.message || 'Google account verification failed. Please try again.'
+          } else if (apiErr.message) {
+            message = apiErr.message
+          }
+        } else if (err instanceof Error) {
+          message = err.message
+        }
         setError(message)
       } finally {
         setSubmitting(false)
+        inFlightRef.current = false
       }
     },
-    [navigate],
+    [isRegister, location.state, navigate, refreshUser],
   )
 
   const handleCredentialSuccessRef = useRef(handleCredentialSuccess)
@@ -59,8 +89,6 @@ export function GoogleSignIn({ action = 'login' }: GoogleSignInProps) {
   }, [handleCredentialSuccess])
 
   useEffect(() => {
-    if (!isRegister) return
-
     const clientId = env.googleClientId
     if (!clientId) return
 
@@ -69,37 +97,41 @@ export function GoogleSignIn({ action = 'login' }: GoogleSignInProps) {
         return false
       }
 
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: (response) => {
-          if (response.credential) {
-            void handleCredentialSuccessRef.current(response.credential)
-          } else {
-            setError('No credentials received from Google. Please try again.')
-          }
-        },
-        auto_select: false,
-        cancel_on_tap_outside: true,
-      })
-
-      if (buttonContainerRef.current) {
-        buttonContainerRef.current.innerHTML = ''
-        window.google.accounts.id.renderButton(buttonContainerRef.current, {
-          type: 'standard',
-          theme: 'outline',
-          size: 'large',
-          text: 'continue_with',
-          shape: 'rectangular',
-          logo_alignment: 'center',
-          width: 380,
-          locale: 'en',
+      try {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (response) => {
+            if (response.credential) {
+              void handleCredentialSuccessRef.current(response.credential)
+            } else {
+              setError('No credentials received from Google. Please try again.')
+            }
+          },
+          auto_select: false,
+          cancel_on_tap_outside: true,
         })
-        if (buttonContainerRef.current.children.length > 0) {
-          setHasRenderedIframe(true)
-        }
-      }
 
-      return true
+        if (buttonContainerRef.current) {
+          buttonContainerRef.current.innerHTML = ''
+          window.google.accounts.id.renderButton(buttonContainerRef.current, {
+            type: 'standard',
+            theme: 'outline',
+            size: 'large',
+            text: 'continue_with',
+            shape: 'rectangular',
+            logo_alignment: 'center',
+            width: 380,
+            locale: 'en',
+          })
+          if (buttonContainerRef.current.children.length > 0) {
+            setHasRenderedIframe(true)
+          }
+        }
+
+        return true
+      } catch {
+        return false
+      }
     }
 
     let interval: NodeJS.Timeout | number | undefined
@@ -118,14 +150,9 @@ export function GoogleSignIn({ action = 'login' }: GoogleSignInProps) {
       if (interval) clearInterval(interval)
       if (timeout) clearTimeout(timeout)
     }
-  }, [isRegister])
+  }, [])
 
   const handleButtonClick = () => {
-    if (!isRegister) {
-      setShowNotice(true)
-      return
-    }
-
     if (!env.googleClientId) {
       setError('Google Sign-In is not configured. Please set VITE_GOOGLE_CLIENT_ID in your environment.')
       return
@@ -147,33 +174,24 @@ export function GoogleSignIn({ action = 'login' }: GoogleSignInProps) {
   return (
     <div className="flex flex-col gap-3">
       {error && <Alert tone="error">{error}</Alert>}
-      {showNotice && (
-        <Alert tone="info">
-          Google sign-in is coming soon. Please use your mobile number or email for now.
-        </Alert>
-      )}
 
-      {isRegister ? (
-        <div className="relative flex justify-center w-full min-h-[44px]">
-          {/* Official Google Identity Services button container */}
-          <div
-            ref={buttonContainerRef}
-            className={hasRenderedIframe && !submitting ? 'w-full flex justify-center' : 'hidden'}
+      <div className="relative flex justify-center w-full min-h-[44px]">
+        {/* Official Google Identity Services button container */}
+        <div
+          ref={buttonContainerRef}
+          className={hasRenderedIframe && !submitting ? 'w-full flex justify-center' : 'hidden'}
+        />
+
+        {/* Fallback button when GIS is loading, not initialized, iframe not inserted, or submitting */}
+        {(!hasRenderedIframe || submitting) && (
+          <GoogleButton
+            loading={submitting}
+            loadingText={loadingText}
+            disabled={submitting}
+            onClick={handleButtonClick}
           />
-
-          {/* Fallback button when GIS is loading, not initialized, iframe not inserted, or submitting */}
-          {(!hasRenderedIframe || submitting) && (
-            <GoogleButton
-              loading={submitting}
-              loadingText="Creating account…"
-              disabled={submitting}
-              onClick={handleButtonClick}
-            />
-          )}
-        </div>
-      ) : (
-        <GoogleButton onClick={handleButtonClick} />
-      )}
+        )}
+      </div>
     </div>
   )
 }

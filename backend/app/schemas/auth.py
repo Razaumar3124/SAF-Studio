@@ -8,7 +8,7 @@ from app.schemas.user import UserOut
 
 # Regex validation rules matching frontend specifications
 _NAME_RE = re.compile(
-    r"^[A-Za-z\u00C0-\u024F\u0900-\u097F][A-Za-z\u00C0-\u024F\u0900-\u097F\s.'\-]*$"
+    r"^[A-Za-z\u00C0-\u024F\u0900-\u0D7F][A-Za-z\u00C0-\u024F\u0900-\u0D7F\s.'’–\-]*$"
 )
 _PASSWORD_HAS_LETTER = re.compile(r"[A-Za-z]")
 _PASSWORD_HAS_DIGIT = re.compile(r"\d")

@@ -155,6 +155,32 @@ describe('apiRequest', () => {
     await expect(api.post('/auth/login', {})).rejects.toMatchObject({ status: 401 })
     expect(handler).not.toHaveBeenCalled()
   })
+
+  it('deduplicates concurrent silent refresh calls when access token is missing', async () => {
+    const { api, fetchMock, storage } = await setup()
+    storage.setItem('saf.has_session', '1')
+
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/auth/refresh')) {
+        return json(200, {
+          access_token: 'fresh-dedup-token',
+          token_type: 'bearer',
+          expires_in: 1800,
+        })
+      }
+      return json(200, { ok: true })
+    })
+
+    // Fire two requests concurrently
+    const [res1, res2] = await Promise.all([api.get('/photos'), api.get('/designs')])
+    expect(res1).toEqual({ ok: true })
+    expect(res2).toEqual({ ok: true })
+
+    // Verify /auth/refresh was only called ONCE despite two concurrent requests
+    const refreshCalls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/auth/refresh'))
+    expect(refreshCalls.length).toBe(1)
+  })
 })
 
 describe('resolveApiUrl', () => {

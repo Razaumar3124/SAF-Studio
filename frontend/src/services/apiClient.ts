@@ -150,6 +150,8 @@ export interface RequestOptions extends Omit<RequestInit, 'body' | 'method'> {
   query?: QueryParams
   /** Attach the Bearer token if one exists. Default true; harmless on public endpoints. */
   auth?: boolean
+  /** Internal retry guard against repeated 401 refresh attempts. */
+  _isRetry?: boolean
 }
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
@@ -168,15 +170,77 @@ function buildUrl(path: string, query?: QueryParams): string {
   return qs ? `${url}?${qs}` : url
 }
 
+let refreshPromise: Promise<string | null> | null = null
+
+/**
+ * Deduplicated silent refresh using the backend's httpOnly refresh cookie.
+ * Multiple concurrent requests wait for a single /auth/refresh promise.
+ */
+export async function requestTokenRefresh(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise
+
+  refreshPromise = (async () => {
+    try {
+      const response = await fetch(buildUrl('/auth/refresh'), {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({}),
+      })
+
+      if (!response.ok) {
+        tokenStorage.clear()
+        return null
+      }
+
+      const text = await response.text()
+      const data = text ? (JSON.parse(text) as { access_token?: string; expires_in?: number }) : null
+      if (data?.access_token) {
+        tokenStorage.save({
+          access_token: data.access_token,
+          refresh_token: '',
+          token_type: 'bearer',
+          expires_in: data.expires_in ?? 1800,
+        })
+        return data.access_token
+      }
+      tokenStorage.clear()
+      return null
+    } catch {
+      tokenStorage.clear()
+      return null
+    } finally {
+      refreshPromise = null
+    }
+  })()
+
+  return refreshPromise
+}
+
 export async function apiRequest<T>(
   method: HttpMethod,
   path: string,
-  { body, query, auth = true, headers, ...init }: RequestOptions = {},
+  { body, query, auth = true, headers, _isRetry = false, ...init }: RequestOptions = {},
 ): Promise<T> {
+  const isAuthRoute =
+    path.includes('/auth/login') ||
+    path.includes('/auth/register') ||
+    path.includes('/auth/refresh') ||
+    path.includes('/auth/google') ||
+    path.includes('/auth/logout')
+
   const isFormData = body instanceof FormData
-  const token = auth ? tokenStorage.getAccessToken() : null
+  let token = auth ? tokenStorage.getAccessToken() : null
   // An expired token is not sent, but the resulting 401 should still end the session.
   const hadSession = auth && tokenStorage.hasSession()
+
+  // If auth is required, token has expired, but a session exists: attempt silent refresh before first call
+  if (auth && !token && hadSession && !isAuthRoute && !_isRetry) {
+    token = await requestTokenRefresh()
+  }
 
   // `new Headers()` accepts every HeadersInit form (object, array, Headers instance);
   // object-spreading a Headers instance would silently drop all of its entries.
@@ -229,6 +293,19 @@ export async function apiRequest<T>(
   if (!response.ok) {
     const error = toApiError(response.status, data)
     if (error.isUnauthorized && hadSession) {
+      if (!_isRetry && !isAuthRoute) {
+        const refreshedToken = await requestTokenRefresh()
+        if (refreshedToken) {
+          return apiRequest<T>(method, path, {
+            ...init,
+            body,
+            query,
+            auth,
+            headers,
+            _isRetry: true,
+          })
+        }
+      }
       tokenStorage.clear()
       unauthorizedHandler?.(error)
     }

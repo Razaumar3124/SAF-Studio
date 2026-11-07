@@ -110,3 +110,83 @@ async def test_google_auth_unverified_email_returns_401(client: AsyncClient):
         response = await client.post("/api/v1/auth/google", json=payload)
         assert response.status_code == 401
         assert response.json()["error"]["code"] == "INVALID_GOOGLE_TOKEN"
+
+
+@pytest.mark.asyncio
+async def test_google_auth_disabled_account_returns_403(
+    client: AsyncClient, fake_user_repo: FakeUserRepository
+):
+    """Test Google auth with email matching disabled account returns 403."""
+    from datetime import UTC, datetime
+
+    from bson import ObjectId
+
+    from app.models.user import UserInDB
+
+    now = datetime.now(UTC)
+    disabled_user = UserInDB(
+        _id=str(ObjectId()),
+        email="disabled.user@example.com",
+        phone="+919876543211",
+        password_hash=None,
+        full_name="Disabled User",
+        role="customer",
+        is_active=False,
+        google_id=None,
+        created_at=now,
+        updated_at=now,
+    )
+    await fake_user_repo.create(disabled_user)
+
+    mock_id_info = {
+        "sub": "google-sub-disabled",
+        "email": "disabled.user@example.com",
+        "email_verified": True,
+        "name": "Disabled User",
+    }
+
+    with patch("google.oauth2.id_token.verify_oauth2_token", return_value=mock_id_info):
+        payload = {"id_token": "valid_token_for_disabled_user"}
+        response = await client.post("/api/v1/auth/google", json=payload)
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "ACCOUNT_DISABLED"
+
+
+@pytest.mark.asyncio
+async def test_google_auth_conflicting_google_id_returns_401(
+    client: AsyncClient, fake_user_repo: FakeUserRepository
+):
+    """Test Google auth with email already linked to different google_id returns 401."""
+    from datetime import UTC, datetime
+
+    from bson import ObjectId
+
+    from app.models.user import UserInDB
+
+    now = datetime.now(UTC)
+    existing_user = UserInDB(
+        _id=str(ObjectId()),
+        email="linked.user@example.com",
+        phone=None,
+        password_hash=None,
+        full_name="Linked User",
+        role="customer",
+        is_active=True,
+        google_id="first-google-id",
+        created_at=now,
+        updated_at=now,
+    )
+    await fake_user_repo.create(existing_user)
+
+    mock_id_info = {
+        "sub": "different-google-id",
+        "email": "linked.user@example.com",
+        "email_verified": True,
+        "name": "Linked User",
+    }
+
+    with patch("google.oauth2.id_token.verify_oauth2_token", return_value=mock_id_info):
+        payload = {"id_token": "valid_token_with_conflict"}
+        response = await client.post("/api/v1/auth/google", json=payload)
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "INVALID_GOOGLE_TOKEN"

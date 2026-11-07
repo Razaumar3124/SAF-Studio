@@ -68,8 +68,17 @@ class GoogleAuthService:
         if not user:
             user = await self.user_repo.get_by_email(email_clean)
             if user:
+                if not user.is_active:
+                    logger.warning("Cannot link Google ID to disabled account: user_id=%s", user.id)
+                    raise AccountDisabledException()
+                if user.google_id and user.google_id != google_id:
+                    logger.warning("User %s already linked to a different Google ID", user.id)
+                    raise InvalidGoogleTokenException(
+                        "This account is already linked to a different Google account."
+                    )
                 # Link Google ID to existing verified email account
                 await self.user_repo.link_google_id(user.id, google_id)
+                user.google_id = google_id
                 logger.info("Linked Google identity to existing account: user_id=%s", user.id)
 
         # 3. If user still does not exist, create new Google user

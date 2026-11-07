@@ -9,6 +9,7 @@ from app.api.dependencies import (
 )
 from app.core.config import Settings
 from app.core.exceptions import InvalidTokenException
+from app.core.security import get_client_ip
 from app.schemas.auth import (
     AuthResponse,
     AuthTokens,
@@ -90,7 +91,7 @@ async def register(
 ) -> AuthResponse:
     """EP-AUTH-01: User registration."""
     user_agent = request.headers.get("user-agent")
-    client_ip = request.client.host if request.client else None
+    client_ip = get_client_ip(request)
 
     result = await auth_service.register_user(req, user_agent=user_agent, ip_address=client_ip)
     _set_refresh_cookie(response, result.tokens.refresh_token, settings)
@@ -127,7 +128,7 @@ async def login(
 ) -> AuthResponse:
     """EP-AUTH-02: User login."""
     user_agent = request.headers.get("user-agent")
-    client_ip = request.client.host if request.client else None
+    client_ip = get_client_ip(request)
 
     result = await auth_service.authenticate_user(req, user_agent=user_agent, ip_address=client_ip)
     _set_refresh_cookie(response, result.tokens.refresh_token, settings)
@@ -167,7 +168,7 @@ async def refresh_tokens(
         raise InvalidTokenException("Missing refresh token in cookie or request body.")
 
     user_agent = request.headers.get("user-agent")
-    client_ip = request.client.host if request.client else None
+    client_ip = get_client_ip(request)
 
     new_tokens = await token_service.rotate_refresh_token(
         raw_refresh_token=raw_token,
@@ -243,7 +244,7 @@ async def forgot_password(
     auth_service: AuthServiceDep,
 ) -> ForgotPasswordResponse:
     """EP-AUTH-06: Step 1 - Password recovery initiation and email OTP dispatch."""
-    client_ip = request.client.host if request.client else None
+    client_ip = get_client_ip(request)
     return await auth_service.request_password_reset_otp(req, ip_address=client_ip)
 
 
@@ -273,7 +274,7 @@ async def verify_forgot_password_otp(
     auth_service: AuthServiceDep,
 ) -> VerifyOtpResponse:
     """EP-AUTH-07: Step 2 - Verify OTP and receive temporary reset token."""
-    client_ip = request.client.host if request.client else None
+    client_ip = get_client_ip(request)
     return await auth_service.verify_password_reset_otp(req, ip_address=client_ip)
 
 
@@ -331,7 +332,7 @@ async def google_auth(
 ) -> AuthResponse:
     """EP-AUTH-07: Google OpenID Connect authentication."""
     user_agent = request.headers.get("user-agent")
-    client_ip = request.client.host if request.client else None
+    client_ip = get_client_ip(request)
 
     result = await google_service.authenticate_with_google(
         id_token_str=req.id_token,

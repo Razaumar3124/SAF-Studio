@@ -12,6 +12,8 @@ export const endpoints = {
     login: '/auth/login', // POST  · public
     google: '/auth/google', // POST  · public
     me: '/auth/me', // GET   · bearer
+    refresh: '/auth/refresh', // POST  · cookie / body
+    logout: '/auth/logout', // POST  · cookie / body
     forgotPassword: '/auth/forgot-password', // POST · public
     verifyOtp: '/auth/forgot-password/verify', // POST · public
     resetPassword: '/auth/forgot-password/reset', // POST · public

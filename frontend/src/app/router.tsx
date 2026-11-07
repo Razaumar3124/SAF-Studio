@@ -2,6 +2,8 @@ import { lazy, Suspense, type ReactNode } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { PageLoader } from '@/components/layout/PageLoader'
 import { ROUTES } from '@/config/routes'
+import { ProtectedRoute } from './ProtectedRoute'
+import { PublicOnlyRoute } from './PublicOnlyRoute'
 import { RouteErrorPage } from './RouteErrorPage'
 
 // Each page is code-split so a visitor on /login never downloads the planner bundle.
@@ -19,11 +21,17 @@ export const router = createBrowserRouter([
     errorElement: <RouteErrorPage />,
     children: [
       { path: ROUTES.home, element: <Navigate to={ROUTES.login} replace /> },
-      { path: ROUTES.login, element: withSuspense(<LoginPage />) },
-      { path: ROUTES.register, element: withSuspense(<RegisterPage />) },
+      { path: ROUTES.login, element: <PublicOnlyRoute>{withSuspense(<LoginPage />)}</PublicOnlyRoute> },
+      { path: ROUTES.register, element: <PublicOnlyRoute>{withSuspense(<RegisterPage />)}</PublicOnlyRoute> },
       { path: ROUTES.forgotPassword, element: withSuspense(<ForgotPasswordPage />) },
-      // TODO(Phase 5): wrap in a <ProtectedRoute> once the FastAPI auth endpoints are live.
-      { path: ROUTES.memoryWall, element: withSuspense(<MemoryWallPage />) },
+      {
+        path: ROUTES.memoryWall,
+        element: (
+          <ProtectedRoute>
+            {withSuspense(<MemoryWallPage />)}
+          </ProtectedRoute>
+        ),
+      },
       { path: '*', element: withSuspense(<NotFoundPage />) },
     ],
   },
