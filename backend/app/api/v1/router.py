@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     geometry,
     health,
     photos,
+    quotes,
     templates,
 )
 
@@ -32,3 +33,6 @@ api_v1_router.include_router(geometry.router)
 
 # Register Phase 6 endpoints
 api_v1_router.include_router(designs.router)
+
+# Register Phase 7 endpoints (WhatsApp Quotes & Digital Design Reports)
+api_v1_router.include_router(quotes.router)

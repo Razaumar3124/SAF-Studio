@@ -8,6 +8,7 @@ interface ActionBarProps {
   onTemplates: () => void
   onSaved: () => void
   onQuote: () => void
+  isSubmittingQuote?: boolean
 }
 
 const ITEMS = (p: ActionBarProps) =>
@@ -67,7 +68,11 @@ export function ActionBar(props: ActionBarProps) {
             </span>
           </button>
         ))}
-        <QuoteButton onClick={props.onQuote} className="h-13 text-base md:col-span-3 desk:col-span-1" />
+        <QuoteButton
+          onClick={props.onQuote}
+          loading={props.isSubmittingQuote}
+          className="h-13 text-base md:col-span-3 desk:col-span-1"
+        />
       </nav>
 
       {/* Phones */}
@@ -80,6 +85,7 @@ export function ActionBar(props: ActionBarProps) {
         ))}
         <QuoteButton
           onClick={props.onQuote}
+          loading={props.isSubmittingQuote}
           className="ml-auto h-12 min-w-0 flex-1 px-2 text-sm min-[360px]:px-3 min-[360px]:text-base"
         />
       </nav>
@@ -104,11 +110,21 @@ function MobileAction({ icon, label, onClick }: { icon: ReactNode; label: string
  * "Request a Quote": the shared Button (primary-gradient, same as the auth CTAs) rather than a
  * forked look-alike (Phase 4 audit). Same label, handler and phone sizing as Moonlight's QuoteButton.
  */
-function QuoteButton({ onClick, className }: { onClick: () => void; className?: string }) {
+function QuoteButton({
+  onClick,
+  loading = false,
+  className,
+}: {
+  onClick: () => void
+  loading?: boolean
+  className?: string
+}) {
   return (
     <Button
       variant="primary-gradient"
       onClick={onClick}
+      loading={loading}
+      loadingText="Preparing Quote…"
       rightIcon={<ArrowRight aria-hidden className="hidden size-5 shrink-0 min-[360px]:block md:block" />}
       className={cn('active:scale-[0.98]', className)}
     >

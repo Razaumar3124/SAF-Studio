@@ -6,6 +6,7 @@ from bson import ObjectId
 from app.core.exceptions import AccountAlreadyExistsException
 from app.models.design import DesignInDB
 from app.models.design_version import DesignVersionInDB
+from app.models.quote import QuoteInDB
 from app.models.session import PasswordResetInDB, RefreshTokenInDB
 from app.models.user import UserInDB
 
@@ -641,3 +642,75 @@ class FakeDesignRepository:
         design_versions = [v for v in self.versions.values() if str(v.get("design_id")) == did]
         design_versions.sort(key=lambda x: x.get("version_number", 0), reverse=True)
         return [DesignVersionInDB(**v) for v in design_versions]
+
+
+class FakeQuoteRepository:
+    """In-memory mock repository simulating MongoDB 'quotes' collection."""
+
+    def __init__(self) -> None:
+        self.quotes: dict[str, dict] = {}
+        self.seq_counter = 0
+        self.should_fail_create = False
+
+    async def create_indexes(self) -> None:
+        pass
+
+    async def get_next_quote_reference(self) -> str:
+        self.seq_counter += 1
+        current_year = datetime.now(UTC).year
+        return f"SQ-{current_year}-{self.seq_counter:04d}"
+
+    async def create(self, quote: QuoteInDB) -> QuoteInDB:
+        from app.core.exceptions import DatabaseUnavailableException
+
+        if self.should_fail_create:
+            raise DatabaseUnavailableException(
+                message="Simulated MongoDB error during quote document creation",
+                issue="Simulated database failure",
+            )
+
+        doc = quote.model_dump(by_alias=True)
+        doc["_id"] = str(quote.id)
+        doc["user_id"] = str(quote.user_id)
+        self.quotes[str(quote.id)] = doc
+        return quote
+
+    async def get_by_id(self, quote_id: str) -> QuoteInDB | None:
+        qid = str(quote_id)
+        # Check by _id or quote_reference
+        if qid in self.quotes:
+            return QuoteInDB(**self.quotes[qid])
+        for q in self.quotes.values():
+            if q.get("quote_reference") == qid:
+                return QuoteInDB(**q)
+        return None
+
+    async def get_by_reference(self, reference: str) -> QuoteInDB | None:
+        for q in self.quotes.values():
+            if q.get("quote_reference") == reference:
+                return QuoteInDB(**q)
+        return None
+
+    async def get_by_share_token_hash(self, token_hash: str) -> QuoteInDB | None:
+        for q in self.quotes.values():
+            if q.get("share_token_hash") == token_hash:
+                return QuoteInDB(**q)
+        return None
+
+    async def get_by_user_id(self, user_id: str, skip: int = 0, limit: int = 20) -> list[QuoteInDB]:
+        uid = str(user_id)
+        matches = [q for q in self.quotes.values() if str(q.get("user_id")) == uid]
+        matches.sort(key=lambda x: x.get("created_at", datetime.now(UTC)), reverse=True)
+        paged = matches[skip : skip + limit]
+        return [QuoteInDB(**q) for q in paged]
+
+    async def delete(self, quote_id: str) -> bool:
+        qid = str(quote_id)
+        if qid in self.quotes:
+            del self.quotes[qid]
+            return True
+        for k, v in list(self.quotes.items()):
+            if v.get("quote_reference") == qid:
+                del self.quotes[k]
+                return True
+        return False

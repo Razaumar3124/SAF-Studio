@@ -94,11 +94,11 @@ export function exportFileName(title: string) {
   return `${slug || 'memory-wall'}-saf.png`
 }
 
-export async function downloadWallPng(
+export async function renderWallPngBlob(
   svg: SVGSVGElement,
   scene: Scene,
   options: { title: string; unit: LengthUnit; guides: boolean },
-): Promise<void> {
+): Promise<Blob> {
   const clone = svg.cloneNode(true) as SVGSVGElement
   const { w: W, h: H } = scene.wall
 
@@ -171,15 +171,24 @@ export async function downloadWallPng(
     const png = await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG encoding failed'))), 'image/png'),
     )
-    const pngUrl = URL.createObjectURL(png)
-    const a = document.createElement('a')
-    a.href = pngUrl
-    a.download = exportFileName(options.title)
-    document.body.append(a)
-    a.click()
-    a.remove()
-    window.setTimeout(() => URL.revokeObjectURL(pngUrl), 10_000)
+    return png
   } finally {
     URL.revokeObjectURL(svgUrl)
   }
+}
+
+export async function downloadWallPng(
+  svg: SVGSVGElement,
+  scene: Scene,
+  options: { title: string; unit: LengthUnit; guides: boolean },
+): Promise<void> {
+  const png = await renderWallPngBlob(svg, scene, options)
+  const pngUrl = URL.createObjectURL(png)
+  const a = document.createElement('a')
+  a.href = pngUrl
+  a.download = exportFileName(options.title)
+  document.body.append(a)
+  a.click()
+  a.remove()
+  window.setTimeout(() => URL.revokeObjectURL(pngUrl), 10_000)
 }

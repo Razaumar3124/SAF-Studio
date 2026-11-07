@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useToast } from '@/components/feedback/toastContext'
 import { pageTitle } from '@/config/app'
+import { ROUTES } from '@/config/routes'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { tokenStorage } from '@/services/tokenStorage'
+import { prepareQuote } from '@/services/quotesApi'
+import type { QuotePrepareResponse } from '@/types/api'
 import { ActionBar } from '../components/ActionBar'
 import { CanvasPanel } from '../components/CanvasPanel'
 import { AiAssistantPanel, FrameGapsPanel, LayoutPanel, WallConfigPanel } from '../components/ConfigPanels'
 import { FrameSelectionPanel, PreviewSettingsPanel } from '../components/FramePanels'
 import { FullscreenPreviewDialog } from '../components/dialogs/FullscreenPreviewDialog'
+import { QuotePreparedDialog } from '../components/dialogs/QuotePreparedDialog'
 import { SaveDesignDialog } from '../components/dialogs/SaveDesignDialog'
 import { SavedDesignsDialog } from '../components/dialogs/SavedDesignsDialog'
 import { TemplatesDialog } from '../components/dialogs/TemplatesDialog'
@@ -14,6 +20,7 @@ import { PlannerHeader } from '../components/PlannerHeader'
 import { LAYOUT_STYLES } from '../constants'
 import { usePhotoUpload } from '../hooks/usePhotoUpload'
 import { usePlanner } from '../hooks/usePlanner'
+import { renderWallPngBlob } from '../lib/exportImage'
 import { suggestLayouts } from '../lib/geometry/scene'
 import type { PlannerState } from '../lib/plannerState'
 import { savedDesignsStore } from '../lib/savedDesigns'
@@ -30,8 +37,11 @@ const styleLabel = (id: string) => LAYOUT_STYLES.find((s) => s.id === id)?.label
 export default function MemoryWallPage() {
   const { state, dispatch, scene } = usePlanner()
   const toast = useToast()
+  const navigate = useNavigate()
   const [dialog, setDialog] = useState<DialogName>(null)
   const [generating, setGenerating] = useState(false)
+  const [isSubmittingQuote, setIsSubmittingQuote] = useState(false)
+  const [preparedQuote, setPreparedQuote] = useState<QuotePrepareResponse | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const isTabletUp = useMediaQuery('(min-width: 48rem)')
   // Page-level, so uploaded photos stay valid for the whole visit (collapsing a panel, Undo).
@@ -101,6 +111,74 @@ export default function MemoryWallPage() {
     })
   }
 
+  const handleQuote = async () => {
+    if (isSubmittingQuote) return
+
+    if (!tokenStorage.getAccessToken()) {
+      toast({
+        tone: 'info',
+        message: 'Please sign in to request a quote for your design.',
+        action: { label: 'Sign in', onClick: () => navigate(ROUTES.login) },
+      })
+      return
+    }
+
+    const svg = svgRef.current
+    if (!svg) {
+      toast({
+        tone: 'error',
+        message: 'Could not access the wall preview. Please try again.',
+      })
+      return
+    }
+
+    let popupWindow: Window | null = null
+    try {
+      popupWindow = window.open('about:blank', '_blank')
+    } catch {
+      // Ignored if window.open is restricted
+    }
+
+    setIsSubmittingQuote(true)
+    try {
+      let blob: Blob
+      try {
+        blob = await renderWallPngBlob(svg, scene, {
+          title: state.title,
+          unit: state.displayUnit,
+          guides: false,
+        })
+      } catch {
+        blob = new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], { type: 'image/png' })
+      }
+
+      const res = await prepareQuote(blob, state, scene)
+
+      if (popupWindow && !popupWindow.closed) {
+        popupWindow.location.href = res.whatsapp_url
+      } else {
+        window.open(res.whatsapp_url, '_blank', 'noopener,noreferrer')
+      }
+
+      setPreparedQuote(res)
+      toast({
+        tone: 'success',
+        message: `Quote ${res.quote_id} prepared! Opening WhatsApp…`,
+      })
+    } catch (err) {
+      if (popupWindow && !popupWindow.closed) {
+        popupWindow.close()
+      }
+      const message = err instanceof Error ? err.message : 'Failed to prepare quote. Please try again.'
+      toast({
+        tone: 'error',
+        message,
+      })
+    } finally {
+      setIsSubmittingQuote(false)
+    }
+  }
+
   const collapsible = !isTabletUp
 
   return (
@@ -164,12 +242,8 @@ export default function MemoryWallPage() {
           onFullscreen={() => setDialog('fullscreen')}
           onTemplates={() => setDialog('templates')}
           onSaved={() => setDialog('saved')}
-          onQuote={() =>
-            toast({
-              message: 'Quote requests open soon. Save your design now and request a quote from it later.',
-              action: { label: 'Save design', onClick: () => setDialog('save') },
-            })
-          }
+          onQuote={handleQuote}
+          isSubmittingQuote={isSubmittingQuote}
         />
       </main>
 
@@ -210,6 +284,11 @@ export default function MemoryWallPage() {
         defaultTitle={state.title}
         hasUploads={state.frames.some((f) => f.photo?.kind === 'upload')}
         onSave={handleSave}
+      />
+      <QuotePreparedDialog
+        open={Boolean(preparedQuote)}
+        onClose={() => setPreparedQuote(null)}
+        quote={preparedQuote}
       />
     </div>
   )

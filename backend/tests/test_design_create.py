@@ -110,4 +110,3 @@ async def test_create_design_validation_errors(client: AsyncClient):
         json={"title": "Bad Color", "wall": {"color_hex": "not-a-color"}},
     )
     assert res_hex.status_code == 422
-

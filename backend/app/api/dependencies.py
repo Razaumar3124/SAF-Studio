@@ -18,6 +18,7 @@ from app.repositories.ai_cache_repository import AICacheRepository
 from app.repositories.catalog_repository import CatalogRepository
 from app.repositories.design_repository import DesignRepository
 from app.repositories.photo_repository import PhotoRepository
+from app.repositories.quote_repository import QuoteRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.template_repository import TemplateRepository
 from app.repositories.user_repository import UserRepository
@@ -30,9 +31,12 @@ from app.services.image_processing_service import ImageProcessingService
 from app.services.layout_service import LayoutService
 from app.services.photo_analysis_service import PhotoAnalysisService
 from app.services.photo_service import PhotoService
+from app.services.quote_report_service import QuoteReportService
+from app.services.quote_service import QuoteService
 from app.services.redesign_service import RedesignService
 from app.services.template_service import TemplateService
 from app.services.token_service import TokenService
+from app.services.whatsapp_service import WhatsAppService
 from app.storage.r2_storage import R2Storage
 
 # Bearer token extractor
@@ -272,6 +276,42 @@ async def get_design_service(
     return DesignService(design_repo=design_repo, photo_repo=photo_repo)
 
 
+async def get_quote_repository(
+    db: Annotated[AsyncDatabase, Depends(get_db)],
+) -> QuoteRepository:
+    """Dependency for QuoteRepository."""
+    return QuoteRepository(db)
+
+
+async def get_whatsapp_service(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> WhatsAppService:
+    """Dependency for WhatsAppService."""
+    return WhatsAppService(business_number=settings.BUSINESS_WHATSAPP_NUMBER)
+
+
+async def get_quote_report_service() -> QuoteReportService:
+    """Dependency for QuoteReportService."""
+    return QuoteReportService()
+
+
+async def get_quote_service(
+    quote_repo: Annotated[QuoteRepository, Depends(get_quote_repository)],
+    photo_repo: Annotated[PhotoRepository, Depends(get_photo_repository)],
+    r2_storage: Annotated[R2Storage, Depends(get_r2_storage)],
+    whatsapp_service: Annotated[WhatsAppService, Depends(get_whatsapp_service)],
+    report_service: Annotated[QuoteReportService, Depends(get_quote_report_service)],
+) -> QuoteService:
+    """Dependency for QuoteService."""
+    return QuoteService(
+        quote_repo=quote_repo,
+        photo_repo=photo_repo,
+        r2_storage=r2_storage,
+        whatsapp_service=whatsapp_service,
+        report_service=report_service,
+    )
+
+
 # Type aliases for clean endpoint injections
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DatabaseDep = Annotated[AsyncDatabase, Depends(get_db)]
@@ -280,6 +320,7 @@ SessionRepoDep = Annotated[SessionRepository, Depends(get_session_repository)]
 CatalogRepoDep = Annotated[CatalogRepository, Depends(get_catalog_repository)]
 TemplateRepoDep = Annotated[TemplateRepository, Depends(get_template_repository)]
 PhotoRepoDep = Annotated[PhotoRepository, Depends(get_photo_repository)]
+QuoteRepoDep = Annotated[QuoteRepository, Depends(get_quote_repository)]
 ImageProcessingServiceDep = Annotated[ImageProcessingService, Depends(get_image_processing_service)]
 R2StorageDep = Annotated[R2Storage, Depends(get_r2_storage)]
 PhotoServiceDep = Annotated[PhotoService, Depends(get_photo_service)]
@@ -294,5 +335,8 @@ CatalogServiceDep = Annotated[CatalogService, Depends(get_catalog_service)]
 TemplateServiceDep = Annotated[TemplateService, Depends(get_template_service)]
 DesignRepoDep = Annotated[DesignRepository, Depends(get_design_repository)]
 DesignServiceDep = Annotated[DesignService, Depends(get_design_service)]
+WhatsAppServiceDep = Annotated[WhatsAppService, Depends(get_whatsapp_service)]
+QuoteReportServiceDep = Annotated[QuoteReportService, Depends(get_quote_report_service)]
+QuoteServiceDep = Annotated[QuoteService, Depends(get_quote_service)]
 CurrentUserDep = Annotated[UserInDB, Depends(get_current_user)]
 OptionalCurrentUserDep = Annotated[UserInDB | None, Depends(get_optional_current_user)]

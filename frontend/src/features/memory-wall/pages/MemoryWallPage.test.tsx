@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { memoryWallAssets } from '@/assets/memoryWall'
 import { ToastProvider } from '@/components/feedback/Toaster'
+import { tokenStorage } from '@/services/tokenStorage'
+import * as quotesApi from '@/services/quotesApi'
 import { PLANNER_RULES, ROOM_PHOTO_IN } from '../constants'
 import MemoryWallPage from './MemoryWallPage'
 
@@ -177,13 +179,56 @@ describe('Planner layout (audit regressions)', () => {
     expect(stage?.style.backgroundColor).not.toBe(before)
   })
 
-  it('"Request a Quote" (desktop and phone bars) is the shared Button and keeps Moonlight\'s toast', () => {
+  it('"Request a Quote" prompts unauthenticated users to sign in', () => {
+    tokenStorage.clear()
     renderPlanner()
     const quotes = screen.getAllByRole('button', { name: /Request a Quote/ })
     expect(quotes).toHaveLength(2)
     for (const q of quotes) expect(q.className).toContain('rounded-field') // shared Button base
     fireEvent.click(quotes[0] as HTMLElement)
-    expect(screen.getByText(/Quote requests open soon/)).toBeTruthy()
+    expect(screen.getByText(/Please sign in to request a quote/)).toBeTruthy()
+  })
+
+  it('"Request a Quote" captures design, prepares quote, and opens WhatsApp when authenticated', async () => {
+    tokenStorage.save({
+      access_token: 'fake-jwt-token',
+      refresh_token: 'fake-refresh-token',
+      expires_in: 3600,
+      token_type: 'Bearer',
+    })
+
+    const mockWindow = {
+      closed: false,
+      location: { href: '' },
+      close: vi.fn(),
+    }
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(mockWindow as unknown as Window)
+
+    const prepareSpy = vi.spyOn(quotesApi, 'prepareQuote').mockResolvedValue({
+      quote_id: 'SQ-2026-0099',
+      status: 'draft',
+      whatsapp_url: 'https://wa.me/919876543210?text=Hello%20SAF%20Studio',
+      report_url: 'http://localhost:5173/q/test-token-123',
+      expires_at: '2026-12-07T10:00:00Z',
+    })
+
+    renderPlanner()
+    const quotes = screen.getAllByRole('button', { name: /Request a Quote/ })
+    await act(async () => {
+      fireEvent.click(quotes[0] as HTMLElement)
+    })
+
+    await waitFor(() => {
+      expect(prepareSpy).toHaveBeenCalledTimes(1)
+    })
+
+    expect(mockWindow.location.href).toBe('https://wa.me/919876543210?text=Hello%20SAF%20Studio')
+    expect(screen.getByText('SQ-2026-0099')).toBeTruthy()
+    expect(screen.getByText(/Quote Request Prepared/)).toBeTruthy()
+
+    openSpy.mockRestore()
+    prepareSpy.mockRestore()
+    tokenStorage.clear()
   })
 })
 

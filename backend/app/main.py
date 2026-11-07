@@ -14,6 +14,7 @@ from app.db.mongodb import mongo_manager
 from app.repositories.catalog_repository import CatalogRepository
 from app.repositories.design_repository import DesignRepository
 from app.repositories.photo_repository import PhotoRepository
+from app.repositories.quote_repository import QuoteRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.template_repository import TemplateRepository
 from app.repositories.user_repository import UserRepository
@@ -48,12 +49,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             template_repo = TemplateRepository(mongo_manager.get_database())
             photo_repo = PhotoRepository(mongo_manager.get_database())
             design_repo = DesignRepository(mongo_manager.get_database())
+            quote_repo = QuoteRepository(mongo_manager.get_database())
             await user_repo.create_indexes()
             await session_repo.create_indexes()
             await catalog_repo.create_indexes()
             await template_repo.create_indexes()
             await photo_repo.create_indexes()
             await design_repo.create_indexes()
+            await quote_repo.create_indexes()
             logger.info("MongoDB collection indexes verified")
         except Exception as exc:
             logger.warning(
@@ -106,6 +109,15 @@ def create_application() -> FastAPI:
 
     # Mount API v1 router
     application.include_router(api_v1_router, prefix=settings.API_V1_STR)
+
+    @application.get("/q/{token}", include_in_schema=False)
+    async def redirect_quote_report(token: str) -> JSONResponse:
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(
+            url=f"{settings.API_V1_STR}/quotes/share/{token}",
+            status_code=307,
+        )
 
     @application.get("/", include_in_schema=False)
     async def root_info(

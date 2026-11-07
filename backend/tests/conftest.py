@@ -12,6 +12,7 @@ from app.api.dependencies import (
     get_catalog_repository,
     get_design_repository,
     get_photo_repository,
+    get_quote_repository,
     get_r2_storage,
     get_session_repository,
     get_template_repository,
@@ -25,12 +26,15 @@ from tests.fakes import (
     FakeCatalogRepository,
     FakeDesignRepository,
     FakePhotoRepository,
+    FakeQuoteRepository,
     FakeR2Storage,
     FakeSessionRepository,
     FakeTemplateRepository,
     FakeUserRepository,
     populate_fake_catalog,
 )
+
+get_settings.cache_clear()
 
 
 @pytest.fixture(scope="session")
@@ -92,6 +96,12 @@ def fake_design_repo() -> FakeDesignRepository:
 
 
 @pytest.fixture
+def fake_quote_repo() -> FakeQuoteRepository:
+    """Isolated in-memory quote repository for tests."""
+    return FakeQuoteRepository()
+
+
+@pytest.fixture
 def fake_r2_storage() -> FakeR2Storage:
     """Isolated in-memory mock Cloudflare R2 object storage."""
     return FakeR2Storage()
@@ -124,6 +134,7 @@ def app(
     fake_template_repo: FakeTemplateRepository,
     fake_photo_repo: FakePhotoRepository,
     fake_design_repo: FakeDesignRepository,
+    fake_quote_repo: FakeQuoteRepository,
     fake_r2_storage: FakeR2Storage,
 ):
     """FastAPI test app instance with overridden dependencies."""
@@ -135,6 +146,7 @@ def app(
     application.dependency_overrides[get_template_repository] = lambda: fake_template_repo
     application.dependency_overrides[get_photo_repository] = lambda: fake_photo_repo
     application.dependency_overrides[get_design_repository] = lambda: fake_design_repo
+    application.dependency_overrides[get_quote_repository] = lambda: fake_quote_repo
     application.dependency_overrides[get_r2_storage] = lambda: fake_r2_storage
     return application
 

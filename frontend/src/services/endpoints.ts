@@ -40,5 +40,8 @@ export const endpoints = {
   quotes: {
     list: '/quotes', // GET  · bearer
     create: '/quotes', // POST · bearer
+    prepare: '/quotes/prepare', // POST · bearer · multipart `file` + `design_data`
+    detail: (quoteId: EntityId) => `/quotes/${id(quoteId)}`, // GET · bearer
+    share: (token: string) => `/quotes/share/${encodeURIComponent(token)}`, // GET · public
   },
 } as const

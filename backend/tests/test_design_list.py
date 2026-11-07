@@ -100,4 +100,3 @@ async def test_list_designs_pagination_and_search(client: AsyncClient):
     data_search = res_search.json()
     assert data_search["total"] == 1
     assert data_search["items"][0]["title"] == "Dining Room Showcase"
-

@@ -159,6 +159,28 @@ class Settings(BaseSettings):
         description="Validity lifetime in seconds for photo thumbnail and preview HMAC signatures",
     )
 
+    # Business Contact & WhatsApp Quotes (Phase 7)
+    BUSINESS_WHATSAPP_NUMBER: str = Field(
+        default="919876543210",
+        description="Static business WhatsApp number without +, spaces or special chars",
+    )
+    PUBLIC_APP_URL: str = Field(
+        default="http://localhost:5173",
+        description="Public canonical base URL for shareable quote reports and application links",
+    )
+    QUOTE_SHARE_EXPIRY_DAYS: int = Field(
+        default=30,
+        description="Validity lifetime in days for shared digital quote design reports",
+    )
+    RATE_LIMIT_QUOTE_PREPARE_MAX_ATTEMPTS: int = Field(
+        default=10,
+        description="Maximum quote preparations allowed per user/IP per hour",
+    )
+    RATE_LIMIT_QUOTE_PREPARE_WINDOW_SECONDS: int = Field(
+        default=3600,
+        description="Time window in seconds for quote preparation rate limiting",
+    )
+
     # Groq AI Creative Curator
     GROQ_API_KEY: str = Field(default="", description="API Key for Groq cloud inference")
     GROQ_MODEL: str = Field(
@@ -185,6 +207,22 @@ class Settings(BaseSettings):
         default=50000,
         description="Maximum daily token consumption allowance across application",
     )
+
+    @field_validator("BUSINESS_WHATSAPP_NUMBER")
+    @classmethod
+    def validate_whatsapp_number(cls, v: str) -> str:
+        cleaned = v.strip().lstrip("+").replace(" ", "").replace("-", "")
+        if not cleaned.isdigit() or not (10 <= len(cleaned) <= 15):
+            raise ValueError(
+                "BUSINESS_WHATSAPP_NUMBER must be in international format (10-15 digits) "
+                "without +, spaces, or special characters"
+            )
+        return cleaned
+
+    @field_validator("PUBLIC_APP_URL")
+    @classmethod
+    def validate_public_app_url(cls, v: str) -> str:
+        return v.rstrip("/")
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

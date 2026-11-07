@@ -20,7 +20,7 @@ export interface CreateQuoteRequest {
   special_instructions?: string
 }
 
-export type QuoteStatus = 'pending_review' | (string & {})
+export type QuoteStatus = 'pending_review' | 'draft' | (string & {})
 
 export interface QuotePricingSummary {
   subtotal: DecimalString
@@ -51,3 +51,13 @@ export interface QuoteSummary {
   status: QuoteStatus
   created_at: ISODateTime
 }
+
+/** Response from POST /quotes/prepare (Phase 7 WhatsApp Quote) */
+export interface QuotePrepareResponse {
+  quote_id: string
+  status: string
+  whatsapp_url: string
+  report_url: string
+  expires_at: ISODateTime
+}
+
