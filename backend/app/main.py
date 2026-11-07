@@ -11,6 +11,8 @@ from app.core.config import Settings, get_settings
 from app.core.handlers import register_exception_handlers
 from app.core.logging import setup_logging
 from app.db.mongodb import mongo_manager
+from app.repositories.session_repository import SessionRepository
+from app.repositories.user_repository import UserRepository
 
 logger = logging.getLogger("saf_studio.app")
 
@@ -32,9 +34,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.ENVIRONMENT,
     )
 
-    # 2. Initialize asynchronous MongoDB connection pool
+    # 2. Initialize asynchronous MongoDB connection pool and indexes
     try:
         await mongo_manager.connect(settings)
+        user_repo = UserRepository(mongo_manager.get_database())
+        session_repo = SessionRepository(mongo_manager.get_database())
+        await user_repo.create_indexes()
+        await session_repo.create_indexes()
+        logger.info("MongoDB authentication indexes verified")
     except Exception as exc:
         logger.warning(
             "MongoDB initial connection deferred or failed: %s (will retry on readiness check)",

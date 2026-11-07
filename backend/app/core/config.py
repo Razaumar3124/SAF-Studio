@@ -46,6 +46,65 @@ class Settings(BaseSettings):
         description="Application log level",
     )
 
+    # JWT & Authentication security
+    SECRET_KEY: str = Field(
+        default="dev-insecure-secret-key-change-in-production-min-32-chars-saf-studio-2026",
+        description="Cryptographic secret key for signing JWT tokens",
+    )
+    JWT_ALGORITHM: str = Field(default="HS256", description="JWT signing algorithm")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=30,
+        description="Access token validity lifetime in minutes",
+    )
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(
+        default=14,
+        description="Refresh token validity lifetime in days",
+    )
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=60,
+        description="Password reset token expiration in minutes",
+    )
+
+    # Cookie settings for refresh token
+    REFRESH_COOKIE_NAME: str = Field(
+        default="refresh_token", description="Name of the refresh cookie"
+    )
+    COOKIE_SECURE: bool = Field(
+        default=False,
+        description="Whether refresh cookie requires HTTPS. Set to True in production.",
+    )
+    COOKIE_SAMESITE: Literal["lax", "strict", "none"] = Field(
+        default="lax",
+        description="SameSite cookie policy",
+    )
+    COOKIE_DOMAIN: str | None = Field(
+        default=None, description="Optional cookie domain restriction"
+    )
+
+    # Google OAuth client ID
+    GOOGLE_CLIENT_ID: str = Field(
+        default="",
+        description="Google OAuth 2.0 Web Client ID for validating Google ID tokens",
+    )
+
+    # Rate limiting thresholds (in-memory token bucket / sliding window)
+    RATE_LIMIT_LOGIN_MAX_ATTEMPTS: int = Field(
+        default=5,
+        description="Maximum failed login attempts within window per identifier/IP",
+    )
+    RATE_LIMIT_LOGIN_WINDOW_SECONDS: int = Field(
+        default=300,
+        description="Time window in seconds for login rate limiting",
+    )
+    RATE_LIMIT_REGISTER_MAX_ATTEMPTS: int = Field(
+        default=5,
+        description="Maximum registrations allowed per IP within window",
+    )
+    RATE_LIMIT_REGISTER_WINDOW_SECONDS: int = Field(
+        default=300,
+        description="Time window in seconds for registration rate limiting",
+    )
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: str | list[str]) -> list[str]:
@@ -71,6 +130,11 @@ class Settings(BaseSettings):
     @property
     def is_development(self) -> bool:
         return self.ENVIRONMENT in ("development", "test")
+
+    @property
+    def effective_cookie_secure(self) -> bool:
+        """Enforce Secure cookies in production regardless of override."""
+        return True if self.is_production else self.COOKIE_SECURE
 
     model_config = SettingsConfigDict(
         env_file=".env",

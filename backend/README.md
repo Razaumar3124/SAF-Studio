@@ -91,7 +91,18 @@ Review and adjust settings in `.env` if necessary:
 | `DATABASE_NAME` | `saf_studio` | Database name |
 | `MONGODB_TIMEOUT_MS` | `5000` | Server selection and connection timeout |
 | `CORS_ORIGINS` | `["http://localhost:5173", "http://127.0.0.1:5173"]` | Allowed frontend origins |
-| `LOG_LEVEL` | `INFO` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `JWT_SECRET_KEY` | `dev-insecure-jwt-secret-replace-in-production-min-32-chars` | Secret key for HMAC-SHA256 JWT access tokens |
+| `JWT_ALGORITHM` | `HS256` | JWT algorithm |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | JWT access token lifespan |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Opaque refresh token lifespan |
+| `REFRESH_COOKIE_NAME` | `refresh_token` | Name of the httpOnly refresh cookie |
+| `REFRESH_COOKIE_SECURE` | `false` | Enable HTTPS Secure flag on cookies (`true` in prod) |
+| `REFRESH_COOKIE_SAMESITE` | `lax` | SameSite cookie policy (`lax`, `strict`, `none`) |
+| `GOOGLE_CLIENT_ID` | `""` | Google OAuth2 client ID for ID token validation |
+| `LOGIN_RATE_LIMIT_MAX_ATTEMPTS`| `5` | Max login attempts before sliding rate limit locks |
+| `LOGIN_RATE_LIMIT_WINDOW_SECONDS`| `300` | Rate limit sliding window (seconds) |
+| `FORGOT_PASSWORD_RATE_LIMIT_MAX` | `3` | Max password recovery attempts |
+| `FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS` | `900` | Password recovery sliding window |
 
 ### 3. Install Dependencies
 
@@ -205,15 +216,55 @@ ruff format --check .
 
 ---
 
-## Phase 1 Scope & Phase 2 Readiness
+## Authentication & Identity APIs (Phase 2)
 
-Phase 1 provides the foundational infrastructure:
-- Modular-monolith folder structure.
-- Asynchronous connection pool management via official PyMongo Async.
-- Typed Pydantic v2 settings.
-- Standard error envelope normalization conforming to `docs/API_CONTRACT.md`.
-- Liveness and readiness endpoints.
-- 100% automated test coverage of foundational components.
+Phase 2 implements production-grade authentication and session lifecycle management with official contracts `EP-AUTH-01` through `EP-AUTH-07`.
 
-Phase 2 will introduce **Authentication, Users & Session Refresh Rotation** (`/api/v1/auth/*`).
+### Endpoints Overview
+
+| Method | Endpoint | Description | Auth Required |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/register` | Register with name, email, phone (+91), password | No |
+| `POST` | `/api/v1/auth/login` | Authenticate using email or phone and password | No |
+| `POST` | `/api/v1/auth/refresh` | Rotate refresh token and issue fresh JWT access token | No (Cookie or Body) |
+| `POST` | `/api/v1/auth/logout` | Revoke refresh token family and clear cookie | No (Cookie or Body) |
+| `GET` | `/api/v1/auth/me` | Retrieve authenticated user profile | Yes (`Bearer <token>`) |
+| `POST` | `/api/v1/auth/forgot-password` | Non-enumerating password reset initiation | No |
+| `POST` | `/api/v1/auth/google` | Cryptographic Google ID token verification and sign-in | No |
+
+### Security Mechanisms
+
+1. **Argon2id Password Hashing:** Stored with salt and high memory cost (`m=65536, t=3, p=4`).
+2. **Timing Attack Protection:** Constant-time dummy verification for unknown users on login prevents account enumeration via response latency.
+3. **Rotating Refresh Tokens with Reuse Detection:**
+   - Refresh tokens are cryptographically generated (32 bytes urlsafe base64).
+   - Only their SHA-256 hash is persisted in MongoDB (`refresh_tokens` collection).
+   - Sessions are grouped into a `family_id`. When a token is rotated, it is marked revoked.
+   - If an already revoked token is replayed, all tokens within that `family_id` are immediately revoked.
+4. **Secure Cookie Transport:**
+   - Refresh token is delivered via `httpOnly`, `Path=/api/v1/auth`, `SameSite=Lax` cookie.
+   - In production (`ENVIRONMENT=production`), the `Secure` flag is enforced.
+5. **Rate Limiting:**
+   - In-memory sliding-window rate limiting prevents credential stuffing (5 attempts per 5 minutes per IP/identifier).
+6. **Google ID Token Verification:**
+   - Uses official `google.oauth2.id_token.verify_oauth2_token` with audience and email verification.
+
+---
+
+## Status & Test Suite
+
+The automated test suite contains **47 passing tests** spanning Phase 1 and Phase 2:
+- `tests/test_health.py` (Liveness, readiness, DB down simulation)
+- `tests/test_config.py` (CORS policies, masking, environment handling)
+- `tests/test_errors.py` (RFC error envelope normalization)
+- `tests/test_auth_register.py` (Registration, validation, duplicate handling)
+- `tests/test_auth_login.py` (Email/phone login, bad password, account disabled)
+- `tests/test_auth_tokens.py` (JWT claims, refresh rotation, replay detection, logout, `/me`)
+- `tests/test_auth_google.py` (Google token verification, user creation & account linking)
+- `tests/test_auth_password_reset.py` (Non-enumerating recovery flow)
+- `tests/test_auth_security.py` (Argon2id hashing, rate limiting, NoSQL injection resistance)
+
+All code passes `ruff check .` and `ruff format --check .` with zero errors.
+
+Phase 3 is prepared to introduce **Catalogs & Templates** (`/api/v1/frames/*`, `/api/v1/templates/*`).
 

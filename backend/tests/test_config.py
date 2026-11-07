@@ -55,4 +55,3 @@ def test_invalid_environment_literal():
     """Verify invalid environment string fails validation."""
     with pytest.raises(ValidationError):
         Settings(ENVIRONMENT="nonexistent_env")  # type: ignore[arg-type]
-
