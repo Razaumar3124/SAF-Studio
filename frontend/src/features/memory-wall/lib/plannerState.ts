@@ -20,8 +20,15 @@ import { newSeed } from './geometry/random'
 
 export type PhotoRef =
   | { kind: 'sample'; sampleId: string }
-  /** Session-only upload (object URL). Not persisted; Phase 5 uploads to /photos. */
-  | { kind: 'upload'; url: string; name: string; widthPx: number; heightPx: number }
+  | {
+      kind: 'upload'
+      photoId?: string
+      url: string
+      name: string
+      widthPx: number
+      heightPx: number
+      thumbnailUrl?: string
+    }
 
 export interface FrameConfig {
   id: string
@@ -126,7 +133,7 @@ export type PlannerAction =
   | { type: 'layout/setGapUnit'; unit: GapUnit }
   | { type: 'layout/regenerate'; seed?: number }
   | { type: 'layout/redesign'; seed?: number }
-  | { type: 'layout/apply'; style: LayoutStyleId; variant: number }
+  | { type: 'layout/apply'; style: LayoutStyleId; variant: number; seed?: number }
   | { type: 'frames/setCount'; count: number }
   | { type: 'frames/select'; index: number }
   | { type: 'frames/update'; index: number; patch: Partial<FrameStyle> }
@@ -208,6 +215,7 @@ export function plannerReducer(state: PlannerState, action: PlannerAction): Plan
           ...state.layout,
           style: action.style,
           variant: ((Math.trunc(action.variant) % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT,
+          seed: action.seed !== undefined && isFiniteNumber(action.seed) ? action.seed : state.layout.seed,
         },
       }
     case 'frames/setCount': {

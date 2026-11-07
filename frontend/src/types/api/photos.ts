@@ -23,4 +23,13 @@ export type PhotoSummary = Pick<
   'id' | 'original_filename' | 'width_px' | 'height_px' | 'aspect_ratio' | 'thumbnail_url' | 'created_at'
 >
 
+export type PhotoUploadResponse = Photo
+
+export interface PhotosListResponse {
+  items: PhotoSummary[]
+  total: number
+  page: number
+  page_size: number
+}
+
 export const PHOTO_UPLOAD_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const

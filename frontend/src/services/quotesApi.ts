@@ -43,6 +43,7 @@ export function serializeDesignForQuote(state: PlannerState, scene?: Scene) {
           ? {
               kind: frame.photo.kind,
               sampleId: frame.photo.kind === 'sample' ? frame.photo.sampleId : undefined,
+              photoId: frame.photo.kind === 'upload' ? frame.photo.photoId : undefined,
               name: frame.photo.kind === 'upload' ? frame.photo.name : undefined,
               url: frame.photo.kind === 'upload' ? frame.photo.url : undefined,
             }

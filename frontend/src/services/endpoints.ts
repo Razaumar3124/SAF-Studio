@@ -27,6 +27,7 @@ export const endpoints = {
     upload: '/photos/upload', // POST · bearer · multipart `file`
     thumbnail: (photoId: EntityId) => `/photos/${id(photoId)}/thumbnail`,
     preview: (photoId: EntityId) => `/photos/${id(photoId)}/preview`,
+    delete: (photoId: EntityId) => `/photos/${id(photoId)}`, // DELETE · bearer
   },
   templates: {
     list: '/templates', // GET · public · ?category&min_frames&max_frames
@@ -34,13 +35,18 @@ export const endpoints = {
   geometry: {
     validateLayout: '/geometry/validate-layout', // POST · optional auth
     generateLayout: '/geometry/generate-layout', // POST · optional auth
+    regenerateLayout: '/geometry/regenerate', // POST · optional auth
+    redesignLayout: '/geometry/redesign', // POST · optional auth
   },
   pricing: {
     calculate: '/pricing/calculate', // POST · optional auth
   },
   designs: {
+    list: '/designs', // GET · bearer
     create: '/designs', // POST · bearer
     detail: (designId: EntityId) => `/designs/${id(designId)}`, // GET · bearer
+    update: (designId: EntityId) => `/designs/${id(designId)}`, // PATCH · bearer
+    delete: (designId: EntityId) => `/designs/${id(designId)}`, // DELETE · bearer
     versions: (designId: EntityId) => `/designs/${id(designId)}/versions`, // POST · bearer
   },
   quotes: {

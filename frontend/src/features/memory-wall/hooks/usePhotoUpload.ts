@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { resolveApiUrl } from '@/services/apiClient'
+import { uploadPhoto } from '@/services/photoApi'
+import { tokenStorage } from '@/services/tokenStorage'
 import { PHOTO_UPLOAD_MIME_TYPES } from '@/types/api'
 import type { PhotoRef } from '../lib/plannerState'
 
@@ -9,18 +12,17 @@ export type UploadResult =
   { ok: true; photo: Extract<PhotoRef, { kind: 'upload' }> } | { ok: false; error: string }
 
 /**
- * Session-only photo "upload" for the UI phases: validates the file, reads its pixel size and
- * returns an object URL. URLs are kept alive for the whole visit (undo / saved designs may still
- * show them) and revoked when the planner unmounts. Phase 5 replaces this with POST /photos/upload.
+ * Uploads a customer photograph to Cloudflare R2 and MongoDB via POST /api/v1/photos/upload.
+ * Generates signed WebP preview and thumbnail URLs, extracts natural dimensions,
+ * and maintains object URL revocation for temporary previews and offline fallback.
  */
 export function usePhotoUpload() {
   const urls = useRef(new Set<string>())
-  // False after unmount: a decode that finishes later must not register (and so leak) its URL.
   const mounted = useRef(true)
 
   useEffect(() => {
     const set = urls.current
-    mounted.current = true // StrictMode re-runs effects after a simulated unmount
+    mounted.current = true
     return () => {
       mounted.current = false
       set.forEach((u) => URL.revokeObjectURL(u))
@@ -35,33 +37,74 @@ export function usePhotoUpload() {
     if (file.size > MAX_UPLOAD_BYTES) {
       return { ok: false, error: 'That photo is larger than 25 MB. Please choose a smaller file.' }
     }
-    const url = URL.createObjectURL(file)
+
+    const localUrl = URL.createObjectURL(file)
     try {
       const img = new Image()
-      img.src = url
+      img.src = localUrl
       await img.decode()
+
       if (Math.min(img.naturalWidth, img.naturalHeight) < MIN_SIDE_PX) {
-        URL.revokeObjectURL(url)
+        URL.revokeObjectURL(localUrl)
         return { ok: false, error: `That photo is too small to print well (under ${MIN_SIDE_PX} px).` }
       }
+
       if (!mounted.current) {
-        // The planner closed while the photo was decoding: nothing can show it, so release it now.
-        URL.revokeObjectURL(url)
+        URL.revokeObjectURL(localUrl)
         return { ok: false, error: 'The upload was cancelled.' }
       }
-      urls.current.add(url)
+
+      // If authenticated, persist to Cloudflare R2 and MongoDB
+      if (tokenStorage.hasSession()) {
+        try {
+          const res = await uploadPhoto(file)
+          URL.revokeObjectURL(localUrl) // Free browser memory
+
+          const previewUrl = resolveApiUrl(res.preview_url) || res.preview_url
+          const thumbUrl = resolveApiUrl(res.thumbnail_url) || res.thumbnail_url
+
+          return {
+            ok: true,
+            photo: {
+              kind: 'upload',
+              photoId: String(res.id),
+              url: previewUrl,
+              thumbnailUrl: thumbUrl,
+              name: res.original_filename || file.name.slice(0, 120),
+              widthPx: res.width_px || img.naturalWidth,
+              heightPx: res.height_px || img.naturalHeight,
+            },
+          }
+        } catch {
+          // If server upload fails (e.g. temporary network blip), fallback to local preview
+          urls.current.add(localUrl)
+          return {
+            ok: true,
+            photo: {
+              kind: 'upload',
+              url: localUrl,
+              name: file.name.slice(0, 120),
+              widthPx: img.naturalWidth,
+              heightPx: img.naturalHeight,
+            },
+          }
+        }
+      }
+
+      // Guest / unauthenticated fallback
+      urls.current.add(localUrl)
       return {
         ok: true,
         photo: {
           kind: 'upload',
-          url,
+          url: localUrl,
           name: file.name.slice(0, 120),
           widthPx: img.naturalWidth,
           heightPx: img.naturalHeight,
         },
       }
     } catch {
-      URL.revokeObjectURL(url)
+      URL.revokeObjectURL(localUrl)
       return {
         ok: false,
         error: 'We couldn’t read that image. It may be damaged or in an unsupported format.',

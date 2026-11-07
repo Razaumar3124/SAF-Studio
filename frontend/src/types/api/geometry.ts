@@ -1,11 +1,9 @@
 /** Contract §6 — Geometry Engine & Layout Validation. All values in inches, top-left origin. */
-import type { BoundingBox, EntityId, MattingInches } from './common'
-import type { TemplateCategory } from './templates'
+import type { BoundingBox, MattingInches } from './common'
 
 /* ----------------------------- §6.1 Validate ------------------------------- */
 
 export interface GeometryFrameInput {
-  /** Client-generated stable id, e.g. `frame-item-1`. */
   item_id: string
   x_inches: number
   y_inches: number
@@ -24,10 +22,8 @@ export interface ValidateLayoutRequest {
   frames: GeometryFrameInput[]
 }
 
-export type LayoutIssueCode = 'LOW_WALL_COVERAGE' | (string & {})
-
 export interface LayoutIssue {
-  code: LayoutIssueCode
+  code: string
   message: string
 }
 
@@ -39,10 +35,6 @@ export interface CalculatedLayoutItem {
   outer_height_inches: number
 }
 
-/**
- * 200 response. Collisions come back as a 422 error envelope with
- * code `GEOMETRY_COLLISION_DETECTED` instead of in `errors` (see Q10).
- */
 export interface ValidateLayoutResponse {
   is_valid: boolean
   bounding_box: BoundingBox
@@ -52,41 +44,108 @@ export interface ValidateLayoutResponse {
   calculated_items: CalculatedLayoutItem[]
 }
 
-/* ----------------------------- §6.2 Generate ------------------------------- */
+/* ------------------------- §6.2 Generate & Solvers -------------------------- */
 
-/** Values beyond the contract's example ("triptych") are unconfirmed (Q6). */
-export type LayoutStyle = TemplateCategory
+export type LayoutStyleType = 'grid' | 'salon' | 'centre' | 'row'
 
-export type TargetAlignment = 'center_eye_level' | (string & {})
-
-export interface GenerateLayoutRequest {
-  wall: {
-    width_inches: number
-    height_inches: number
-    margin_inches: number
-  }
-  photo_ids: EntityId[]
-  layout_style: LayoutStyle
-  spacing_inches: number
-  target_alignment: TargetAlignment
-  eye_level_height_inches: number
+export interface WallGeometryInput {
+  width_inches: number
+  height_inches: number
+  margin_inches?: number
+  has_sofa?: boolean
+  eye_level_height_inches?: number
 }
 
-export interface GeneratedLayoutItem {
-  slot_index: number
-  photo_id: EntityId
-  x_inches: number
-  y_inches: number
+export interface MattingGeometryInput {
+  enabled: boolean
+  top_inches: number
+  bottom_inches: number
+  left_inches: number
+  right_inches: number
+}
+
+export interface FrameItemGeometryInput {
+  item_id: string
+  photo_id?: string | null
   photo_width_inches: number
   photo_height_inches: number
-  matting: MattingInches
+  matting: MattingGeometryInput
   frame_profile_width_inches: number
-  total_width_inches: number
-  total_height_inches: number
+  orientation: 'portrait' | 'landscape' | 'square'
+}
+
+export interface PlacedItemOutput {
+  item_id: string
+  photo_id?: string | null
+  outer_x_inches: number
+  outer_y_inches: number
+  outer_width_inches: number
+  outer_height_inches: number
+  photo_x_inches: number
+  photo_y_inches: number
+  photo_width_inches: number
+  photo_height_inches: number
+}
+
+export interface GenerateLayoutRequest {
+  wall: WallGeometryInput
+  frames: FrameItemGeometryInput[]
+  layout_style?: LayoutStyleType | null
+  spacing_inches?: number
+  engine_mode?: 'smart_llm' | 'geometric'
+  seed?: number | null
+  variant?: number
 }
 
 export interface GenerateLayoutResponse {
-  layout_type: LayoutStyle
+  layout_type: LayoutStyleType
+  variant: number
+  seed: number
   bounding_box: BoundingBox
-  items: GeneratedLayoutItem[]
+  wall_coverage_percentage: number
+  fits: boolean
+  engine_used: 'smart_llm' | 'geometric' | 'fallback_geometric'
+  ai_rationale?: string | null
+  warnings?: LayoutIssue[]
+  items: PlacedItemOutput[]
+}
+
+export interface RegenerateLayoutRequest {
+  wall: WallGeometryInput
+  frames: FrameItemGeometryInput[]
+  layout_style: LayoutStyleType
+  current_seed: number
+  current_variant?: number
+  spacing_inches?: number
+}
+
+export interface RegenerateLayoutResponse {
+  layout_type: LayoutStyleType
+  variant: number
+  seed: number
+  bounding_box: BoundingBox
+  wall_coverage_percentage: number
+  fits: boolean
+  engine_used: 'geometric'
+  items: PlacedItemOutput[]
+}
+
+export interface RedesignLayoutRequest {
+  wall: WallGeometryInput
+  frames: FrameItemGeometryInput[]
+  current_layout_style: LayoutStyleType
+  spacing_inches?: number
+  engine_mode?: 'smart_llm' | 'geometric'
+}
+
+export interface RedesignLayoutResponse {
+  layout_type: LayoutStyleType
+  variant: number
+  seed: number
+  bounding_box: BoundingBox
+  wall_coverage_percentage: number
+  fits: boolean
+  engine_used: 'smart_llm' | 'geometric' | 'fallback_geometric'
+  ai_rationale?: string | null
+  items: PlacedItemOutput[]
 }

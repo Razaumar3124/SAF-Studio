@@ -208,7 +208,7 @@ function PhotoPicker({
   const [dragOver, setDragOver] = useState(false)
   const photo = frame.photo
   const sample = photo?.kind === 'sample' ? samplePhotos.find((p) => p.id === photo.sampleId) : undefined
-  const thumb = photo?.kind === 'upload' ? photo.url : sample?.src
+  const thumb = photo?.kind === 'upload' ? photo.thumbnailUrl || photo.url : sample?.src
 
   const handleFile = async (file: File | undefined) => {
     if (!file || busy) return

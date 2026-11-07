@@ -4,9 +4,16 @@ import { useToast } from '@/components/feedback/toastContext'
 import { pageTitle } from '@/config/app'
 import { ROUTES } from '@/config/routes'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { tokenStorage } from '@/services/tokenStorage'
+import * as geometryApi from '@/services/geometryApi'
 import { prepareQuote } from '@/services/quotesApi'
-import type { QuotePrepareResponse } from '@/types/api'
+import { tokenStorage } from '@/services/tokenStorage'
+import type {
+  FrameItemGeometryInput,
+  GenerateLayoutRequest,
+  QuotePrepareResponse,
+  RedesignLayoutRequest,
+  RegenerateLayoutRequest,
+} from '@/types/api'
 import { ActionBar } from '../components/ActionBar'
 import { CanvasPanel } from '../components/CanvasPanel'
 import { AiAssistantPanel, FrameGapsPanel, LayoutPanel, WallConfigPanel } from '../components/ConfigPanels'
@@ -17,11 +24,11 @@ import { SaveDesignDialog } from '../components/dialogs/SaveDesignDialog'
 import { SavedDesignsDialog } from '../components/dialogs/SavedDesignsDialog'
 import { TemplatesDialog } from '../components/dialogs/TemplatesDialog'
 import { PlannerHeader } from '../components/PlannerHeader'
-import { LAYOUT_STYLES } from '../constants'
+import { LAYOUT_STYLES, type LayoutStyleId } from '../constants'
 import { usePhotoUpload } from '../hooks/usePhotoUpload'
 import { usePlanner } from '../hooks/usePlanner'
 import { renderWallPngBlob } from '../lib/exportImage'
-import { suggestLayouts } from '../lib/geometry/scene'
+import { frameGeometry, suggestLayouts } from '../lib/geometry/scene'
 import type { PlannerState } from '../lib/plannerState'
 import { savedDesignsStore } from '../lib/savedDesigns'
 import type { PlannerTemplate } from '../lib/templates'
@@ -29,6 +36,27 @@ import type { PlannerTemplate } from '../lib/templates'
 type DialogName = 'fullscreen' | 'templates' | 'saved' | 'save' | null
 
 const styleLabel = (id: string) => LAYOUT_STYLES.find((s) => s.id === id)?.label ?? id
+
+function toGeoFrames(frames: PlannerState['frames']): FrameItemGeometryInput[] {
+  return frames.map((frame) => {
+    const geo = frameGeometry(frame)
+    return {
+      item_id: frame.id,
+      photo_id: frame.photo?.kind === 'upload' && frame.photo.photoId ? frame.photo.photoId : undefined,
+      photo_width_inches: geo.opening.w,
+      photo_height_inches: geo.opening.h,
+      matting: {
+        enabled: frame.mount.enabled,
+        top_inches: frame.mount.enabled ? frame.mount.marginIn : 0,
+        bottom_inches: frame.mount.enabled ? frame.mount.marginIn : 0,
+        left_inches: frame.mount.enabled ? frame.mount.marginIn : 0,
+        right_inches: frame.mount.enabled ? frame.mount.marginIn : 0,
+      },
+      frame_profile_width_inches: geo.profileIn,
+      orientation: frame.orientation,
+    }
+  })
+}
 
 /**
  * Memory Wall Planner. All state lives in usePlanner; this page wires panels, dialogs and
@@ -59,26 +87,126 @@ export default function MemoryWallPage() {
   const close = () => setDialog(null)
   const undoTo = (previous: PlannerState) => () => dispatch({ type: 'design/load', state: previous })
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (generating) return
     window.clearTimeout(generateTimer.current)
     setGenerating(true)
-    // A short beat so the action feels considered; the maths itself takes < 5 ms. Computed from
-    // the state at that moment, so edits made during the beat are respected and undoable.
-    generateTimer.current = window.setTimeout(() => {
-      const previous = latestState.current
-      const best = suggestLayouts(previous)[0]
-      setGenerating(false)
-      if (!best) return
-      dispatch({ type: 'layout/apply', style: best.style, variant: best.variant })
+    const previous = latestState.current
+
+    try {
+      const req: GenerateLayoutRequest = {
+        wall: {
+          width_inches: previous.wall.widthIn,
+          height_inches: previous.wall.heightIn,
+          has_sofa: previous.preview.sofa,
+        },
+        frames: toGeoFrames(previous.frames),
+        layout_style: previous.layout.style,
+        spacing_inches: Math.max(0.5, Math.min(12.0, previous.layout.gapIn)),
+        engine_mode: 'smart_llm',
+        seed: previous.layout.seed,
+        variant: (previous.layout.variant + 1) % 3,
+      }
+      const res = await geometryApi.generateLayout(req)
+      const mappedStyle = (LAYOUT_STYLES.find((s) => s.id === res.layout_type)?.id as LayoutStyleId) ?? 'grid'
+      dispatch({
+        type: 'layout/apply',
+        style: mappedStyle,
+        variant: res.variant,
+        seed: res.seed,
+      })
       toast({
-        tone: best.scene.fits ? 'success' : 'info',
-        message: best.scene.fits
-          ? `Best fit: ${styleLabel(best.style)} layout, option ${best.variant + 1}. Covers ${Math.round(best.scene.coverage * 100)}% of the wall.`
-          : 'No layout fits these frames on this wall. Showing the closest match. Try smaller frames or a bigger wall.',
+        tone: res.fits ? 'success' : 'info',
+        message:
+          res.ai_rationale ||
+          (res.fits
+            ? `Best fit: ${styleLabel(mappedStyle)} layout, option ${res.variant + 1}. Covers ${Math.round(res.wall_coverage_percentage)}% of the wall.`
+            : 'No layout fits these frames on this wall. Showing the closest match. Try smaller frames or a bigger wall.'),
         action: { label: 'Undo', onClick: undoTo(previous) },
       })
-    }, 450)
+    } catch {
+      // Graceful fallback to local geometry solver
+      const best = suggestLayouts(previous)[0]
+      if (best) {
+        dispatch({ type: 'layout/apply', style: best.style, variant: best.variant })
+        toast({
+          tone: best.scene.fits ? 'success' : 'info',
+          message: best.scene.fits
+            ? `Best fit: ${styleLabel(best.style)} layout, option ${best.variant + 1}. Covers ${Math.round(best.scene.coverage * 100)}% of the wall.`
+            : 'No layout fits these frames on this wall. Showing the closest match. Try smaller frames or a bigger wall.',
+          action: { label: 'Undo', onClick: undoTo(previous) },
+        })
+      }
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleRegenerate = async () => {
+    const previous = latestState.current
+    try {
+      const req: RegenerateLayoutRequest = {
+        wall: {
+          width_inches: previous.wall.widthIn,
+          height_inches: previous.wall.heightIn,
+          has_sofa: previous.preview.sofa,
+        },
+        frames: toGeoFrames(previous.frames),
+        layout_style: previous.layout.style,
+        current_seed: previous.layout.seed,
+        current_variant: previous.layout.variant,
+        spacing_inches: Math.max(0.5, Math.min(12.0, previous.layout.gapIn)),
+      }
+      const res = await geometryApi.regenerateLayout(req)
+      const mappedStyle =
+        (LAYOUT_STYLES.find((s) => s.id === res.layout_type)?.id as LayoutStyleId) ?? previous.layout.style
+      dispatch({
+        type: 'layout/apply',
+        style: mappedStyle,
+        variant: res.variant,
+        seed: res.seed,
+      })
+      toast({
+        tone: 'success',
+        message: `Regenerated layout variation ${res.variant + 1}.`,
+        action: { label: 'Undo', onClick: undoTo(previous) },
+      })
+    } catch {
+      dispatch({ type: 'layout/regenerate' })
+    }
+  }
+
+  const handleRedesign = async () => {
+    const previous = latestState.current
+    try {
+      const req: RedesignLayoutRequest = {
+        wall: {
+          width_inches: previous.wall.widthIn,
+          height_inches: previous.wall.heightIn,
+          has_sofa: previous.preview.sofa,
+        },
+        frames: toGeoFrames(previous.frames),
+        current_layout_style: previous.layout.style,
+        spacing_inches: Math.max(0.5, Math.min(12.0, previous.layout.gapIn)),
+        engine_mode: 'smart_llm',
+      }
+      const res = await geometryApi.redesignLayout(req)
+      const mappedStyle =
+        (LAYOUT_STYLES.find((s) => s.id === res.layout_type)?.id as LayoutStyleId) ?? 'grid'
+      dispatch({
+        type: 'layout/apply',
+        style: mappedStyle,
+        variant: res.variant,
+        seed: res.seed,
+      })
+      toast({
+        tone: 'success',
+        message: res.ai_rationale || `Redesigned with ${styleLabel(mappedStyle)} layout.`,
+        action: { label: 'Undo', onClick: undoTo(previous) },
+      })
+    } catch {
+      dispatch({ type: 'layout/redesign' })
+    }
   }
 
   const handleReset = () => {
@@ -209,8 +337,8 @@ export default function MemoryWallPage() {
               onSave={() => setDialog('save')}
               onReset={handleReset}
               onGenerate={handleGenerate}
-              onRegenerate={() => dispatch({ type: 'layout/regenerate' })}
-              onRedesign={() => dispatch({ type: 'layout/redesign' })}
+              onRegenerate={handleRegenerate}
+              onRedesign={handleRedesign}
             />
           </div>
           <div className="min-w-0 md:col-span-2 desk:col-span-5 desk:col-start-1 desk:row-start-1 desk:h-full [&>section]:h-full">
@@ -268,9 +396,14 @@ export default function MemoryWallPage() {
         onClose={close}
         unit={state.displayUnit}
         onSaveCurrent={() => setDialog('save')}
-        onOpenDesign={(design) => {
+        onOpenDesign={async (design) => {
           const previous = state
-          dispatch({ type: 'design/load', state: design.state })
+          try {
+            const loadedState = await savedDesignsStore.loadDesignDetail(design)
+            dispatch({ type: 'design/load', state: loadedState })
+          } catch {
+            dispatch({ type: 'design/load', state: design.state })
+          }
           close()
           toast({
             message: `Opened “${design.title}”.`,
