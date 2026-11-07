@@ -166,4 +166,3 @@ async def test_generate_layout_deterministic_with_same_seed(client: AsyncClient)
     res2 = await client.post("/api/v1/geometry/generate-layout", json=payload)
 
     assert res1.json()["items"] == res2.json()["items"]
-

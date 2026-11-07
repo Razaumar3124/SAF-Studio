@@ -53,4 +53,3 @@ async def test_regenerate_layout_zero_ai_tokens(client: AsyncClient):
     data = response.json()
     assert data["engine_used"] == "geometric"
     assert "ai_rationale" not in data
-

@@ -107,4 +107,3 @@ def normalize(rects: Sequence[Rect]) -> list[Rect]:
         return []
     b = bounds(rects)
     return [translate(r, -b.x, -b.y) for r in rects]
-

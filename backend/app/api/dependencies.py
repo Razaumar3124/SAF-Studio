@@ -16,6 +16,7 @@ from app.integrations.groq_client import GroqClient
 from app.models.user import UserInDB
 from app.repositories.ai_cache_repository import AICacheRepository
 from app.repositories.catalog_repository import CatalogRepository
+from app.repositories.design_repository import DesignRepository
 from app.repositories.photo_repository import PhotoRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.template_repository import TemplateRepository
@@ -23,6 +24,7 @@ from app.repositories.user_repository import UserRepository
 from app.services.ai_usage_service import AIUsageService
 from app.services.auth_service import AuthService
 from app.services.catalog_service import CatalogService
+from app.services.design_service import DesignService
 from app.services.google_auth_service import GoogleAuthService
 from app.services.image_processing_service import ImageProcessingService
 from app.services.layout_service import LayoutService
@@ -255,6 +257,21 @@ async def get_redesign_service(
     )
 
 
+async def get_design_repository(
+    db: Annotated[AsyncDatabase, Depends(get_db)],
+) -> DesignRepository:
+    """Dependency for DesignRepository."""
+    return DesignRepository(db)
+
+
+async def get_design_service(
+    design_repo: Annotated[DesignRepository, Depends(get_design_repository)],
+    photo_repo: Annotated[PhotoRepository, Depends(get_photo_repository)],
+) -> DesignService:
+    """Dependency for DesignService."""
+    return DesignService(design_repo=design_repo, photo_repo=photo_repo)
+
+
 # Type aliases for clean endpoint injections
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DatabaseDep = Annotated[AsyncDatabase, Depends(get_db)]
@@ -275,5 +292,7 @@ AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 GoogleAuthServiceDep = Annotated[GoogleAuthService, Depends(get_google_auth_service)]
 CatalogServiceDep = Annotated[CatalogService, Depends(get_catalog_service)]
 TemplateServiceDep = Annotated[TemplateService, Depends(get_template_service)]
+DesignRepoDep = Annotated[DesignRepository, Depends(get_design_repository)]
+DesignServiceDep = Annotated[DesignService, Depends(get_design_service)]
 CurrentUserDep = Annotated[UserInDB, Depends(get_current_user)]
 OptionalCurrentUserDep = Annotated[UserInDB | None, Depends(get_optional_current_user)]

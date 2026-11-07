@@ -1,8 +1,11 @@
 from datetime import UTC, datetime
+from typing import Any
 
 from bson import ObjectId
 
 from app.core.exceptions import AccountAlreadyExistsException
+from app.models.design import DesignInDB
+from app.models.design_version import DesignVersionInDB
 from app.models.session import PasswordResetInDB, RefreshTokenInDB
 from app.models.user import UserInDB
 
@@ -502,3 +505,139 @@ class FakeR2Storage:
         return (
             f"https://mock-r2.cloudflarestorage.com/{self.bucket_name}/{key}?expires={expires_in}"
         )
+
+
+class FakeDesignRepository:
+    """In-memory repository simulating MongoDB 'designs' and 'design_versions'."""
+
+    def __init__(self) -> None:
+        self.designs: dict[str, dict] = {}
+        self.versions: dict[str, dict] = {}
+        self.version_counters: dict[str, int] = {}
+
+    async def create_indexes(self) -> None:
+        pass
+
+    async def create_design(self, design: DesignInDB) -> DesignInDB:
+        doc = design.model_dump(by_alias=True)
+        doc["_id"] = str(design.id)
+        doc["user_id"] = str(design.user_id)
+        self.designs[str(design.id)] = doc
+        self.version_counters[str(design.id)] = design.version_counter
+        return design
+
+    async def get_design_by_id(
+        self,
+        design_id: str,
+        include_deleted: bool = False,
+    ) -> DesignInDB | None:
+        doc = self.designs.get(str(design_id))
+        if not doc:
+            return None
+        if not include_deleted and doc.get("is_deleted", False):
+            return None
+        return DesignInDB(**doc)
+
+    async def update_design(
+        self,
+        design_id: str,
+        updates: dict[str, Any],
+    ) -> DesignInDB | None:
+        doc = self.designs.get(str(design_id))
+        if not doc or doc.get("is_deleted", False):
+            return None
+
+        for k, v in updates.items():
+            doc[k] = v
+        doc["updated_at"] = datetime.now(UTC)
+        return DesignInDB(**doc)
+
+    async def delete_design(self, design_id: str) -> bool:
+        doc = self.designs.get(str(design_id))
+        if not doc or doc.get("is_deleted", False):
+            return False
+
+        now = datetime.now(UTC)
+        doc["is_deleted"] = True
+        doc["deleted_at"] = now
+        doc["updated_at"] = now
+        return True
+
+    async def list_designs_by_user(
+        self,
+        user_id: str,
+        page: int = 1,
+        page_size: int = 20,
+        status: str | None = None,
+        search: str | None = None,
+        sort: str = "updated_at:desc",
+    ) -> tuple[list[DesignInDB], int]:
+        matches: list[dict] = []
+        uid = str(user_id)
+
+        for d in self.designs.values():
+            if str(d.get("user_id")) != uid:
+                continue
+            if d.get("is_deleted", False):
+                continue
+            if status and d.get("status") != status:
+                continue
+            if search and search.lower() not in d.get("title", "").lower():
+                continue
+            matches.append(d)
+
+        # Sorting
+        sort_field, sort_dir = "updated_at", "desc"
+        if sort:
+            parts = sort.split(":")
+            sort_field = parts[0]
+            if len(parts) > 1:
+                sort_dir = parts[1].lower()
+
+        reverse = sort_dir == "desc"
+        matches.sort(
+            key=lambda x: str(x.get(sort_field, "")),
+            reverse=reverse,
+        )
+
+        total = len(matches)
+        start = (page - 1) * page_size
+        paged = matches[start : start + page_size]
+        return [DesignInDB(**doc) for doc in paged], total
+
+    async def get_next_version_number(self, design_id: str) -> int:
+        did = str(design_id)
+        if did not in self.designs or self.designs[did].get("is_deleted", False):
+            raise ValueError(f"Design '{design_id}' not found")
+
+        curr = self.version_counters.get(did, 0) + 1
+        self.version_counters[did] = curr
+        self.designs[did]["version_counter"] = curr
+        return curr
+
+    async def create_version(self, version: DesignVersionInDB) -> DesignVersionInDB:
+        doc = version.model_dump(by_alias=True)
+        doc["_id"] = str(version.id)
+        doc["design_id"] = str(version.design_id)
+        self.versions[str(version.id)] = doc
+        return version
+
+    async def get_version_by_id(self, version_id: str) -> DesignVersionInDB | None:
+        doc = self.versions.get(str(version_id))
+        if not doc:
+            return None
+        return DesignVersionInDB(**doc)
+
+    async def get_latest_version(self, design_id: str) -> DesignVersionInDB | None:
+        did = str(design_id)
+        design_versions = [v for v in self.versions.values() if str(v.get("design_id")) == did]
+        if not design_versions:
+            return None
+        design_versions.sort(key=lambda x: x.get("version_number", 0), reverse=True)
+        return DesignVersionInDB(**design_versions[0])
+
+    async def list_versions_by_design(self, design_id: str) -> list[DesignVersionInDB]:
+        did = str(design_id)
+        design_versions = [v for v in self.versions.values() if str(v.get("design_id")) == did]
+        design_versions.sort(key=lambda x: x.get("version_number", 0), reverse=True)
+        return [DesignVersionInDB(**v) for v in design_versions]

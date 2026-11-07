@@ -12,6 +12,7 @@ from app.core.handlers import register_exception_handlers
 from app.core.logging import setup_logging
 from app.db.mongodb import mongo_manager
 from app.repositories.catalog_repository import CatalogRepository
+from app.repositories.design_repository import DesignRepository
 from app.repositories.photo_repository import PhotoRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.template_repository import TemplateRepository
@@ -46,11 +47,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             catalog_repo = CatalogRepository(mongo_manager.get_database())
             template_repo = TemplateRepository(mongo_manager.get_database())
             photo_repo = PhotoRepository(mongo_manager.get_database())
+            design_repo = DesignRepository(mongo_manager.get_database())
             await user_repo.create_indexes()
             await session_repo.create_indexes()
             await catalog_repo.create_indexes()
             await template_repo.create_indexes()
             await photo_repo.create_indexes()
+            await design_repo.create_indexes()
             logger.info("MongoDB collection indexes verified")
         except Exception as exc:
             logger.warning(

@@ -78,4 +78,3 @@ class AICacheRepository:
     def clear(self) -> None:
         """Clear cache."""
         self._cache.clear()
-

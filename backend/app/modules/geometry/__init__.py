@@ -92,4 +92,3 @@ __all__ = [
     "translate",
     "validate_placed_frames",
 ]
-

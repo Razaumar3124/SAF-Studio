@@ -79,4 +79,3 @@ class AIUsageService:
         """Reset usage metrics (useful in unit tests)."""
         self._user_daily_requests.clear()
         self._global_daily_tokens.clear()
-

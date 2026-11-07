@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     auth,
+    designs,
     frame_materials,
     frames,
     geometry,
@@ -28,3 +29,6 @@ api_v1_router.include_router(photos.router)
 
 # Register Phase 5 endpoints
 api_v1_router.include_router(geometry.router)
+
+# Register Phase 6 endpoints
+api_v1_router.include_router(designs.router)
