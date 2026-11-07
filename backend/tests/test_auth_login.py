@@ -138,4 +138,3 @@ async def test_login_disabled_account_returns_403(client: AsyncClient):
     response = await client.post("/api/v1/auth/login", json=payload)
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "ACCOUNT_DISABLED"
-

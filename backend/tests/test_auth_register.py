@@ -133,4 +133,3 @@ async def test_register_password_too_short(client: AsyncClient):
     }
     response = await client.post("/api/v1/auth/register", json=payload)
     assert response.status_code == 422
-

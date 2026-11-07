@@ -117,4 +117,3 @@ class GoogleAuthService:
         )
 
         return AuthResponse(user=user_out, tokens=tokens)
-

@@ -251,9 +251,40 @@ Phase 2 implements production-grade authentication and session lifecycle managem
 
 ---
 
+## Catalogs & Templates APIs (Phase 3)
+
+Phase 3 implements publicly accessible read-only catalogs for framing materials, moldings profiles, and gallery wall layout templates, conforming to contracts `EP-CAT-01`, `EP-CAT-02`, and `EP-TMPL-01`.
+
+### Endpoints Overview
+
+| Method | Endpoint | Description | Auth Required |
+|---|---|---|---|
+| `GET` | `/api/v1/frame-materials` | Master catalog of materials (`wood`, `metal`, `synthetic`) with category & availability filters | Public |
+| `GET` | `/api/v1/frames` | Commercial frame molding profiles, face dimensions, swatches, and linear pricing | Public |
+| `GET` | `/api/v1/templates` | Pre-engineered gallery wall layout templates with slot coordinates and recommended wall sizes | Public |
+
+### Database Seeding Mechanism
+
+An idempotent seeder loads initial frontend materials, swatches, and templates into MongoDB without duplicating records:
+
+```bash
+# Clean or development seeding:
+python -m app.db.seed_catalog
+
+# Update existing records with latest seed values:
+python -m app.db.seed_catalog --overwrite
+```
+
+**Seeded Collections:**
+1. `frame_materials`: 4 master materials (Natural White Oak, Premium Plantation Teak, Anodized Aluminium, Engineered Polymer Composite).
+2. `frame_moldings`: 4 commercial profiles including the 8 frontend wood finishes (`Walnut`, `Natural Oak`, `Ivory`, `Whitewash`, `Dark Teak`, `Honey`, `Golden Teak`, `Mahogany`) with hex swatch codes and face widths (resolving UI mismatch M8).
+3. `layout_templates`: 10 gallery wall layouts matching frontend constants (`balanced-grid`, `creative-salon`, `centre-focus`, `minimal-row`, `classic-six`, `triptych`, `petite-salon`, `statement-centre`, `panorama-row`, `grand-quad`).
+
+---
+
 ## Status & Test Suite
 
-The automated test suite contains **47 passing tests** spanning Phase 1 and Phase 2:
+The automated test suite contains **84 passing tests** across Phases 1, 2, and 3:
 - `tests/test_health.py` (Liveness, readiness, DB down simulation)
 - `tests/test_config.py` (CORS policies, masking, environment handling)
 - `tests/test_errors.py` (RFC error envelope normalization)
@@ -263,8 +294,12 @@ The automated test suite contains **47 passing tests** spanning Phase 1 and Phas
 - `tests/test_auth_google.py` (Google token verification, user creation & account linking)
 - `tests/test_auth_password_reset.py` (Non-enumerating recovery flow)
 - `tests/test_auth_security.py` (Argon2id hashing, rate limiting, NoSQL injection resistance)
+- `tests/test_frame_materials.py` (Material listing, category filtering, availability, sorting, validation)
+- `tests/test_frames.py` (Molding profiles, M8 hex swatches, material filtering, width ranges, validation)
+- `tests/test_templates.py` (Template listing, slot geometries, category filtering, frame count range, ordering)
+- `tests/test_catalog_seed.py` (Idempotent repeated seeding, non-overwrite protection, reference integrity)
 
 All code passes `ruff check .` and `ruff format --check .` with zero errors.
 
-Phase 3 is prepared to introduce **Catalogs & Templates** (`/api/v1/frames/*`, `/api/v1/templates/*`).
+Phase 4 is prepared to introduce **Photograph Management & Storage** (`/api/v1/photos/*`).
 

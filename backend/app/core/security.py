@@ -134,4 +134,3 @@ def normalize_phone(raw: str, default_country_code: str = "+91") -> str | None:
         return f"+{digits}"
 
     return None
-

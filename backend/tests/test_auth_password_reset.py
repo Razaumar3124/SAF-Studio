@@ -68,4 +68,3 @@ async def test_forgot_password_invalid_email_format(client: AsyncClient):
     payload = {"email": "not-an-email"}
     response = await client.post("/api/v1/auth/forgot-password", json=payload)
     assert response.status_code == 422
-

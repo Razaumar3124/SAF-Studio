@@ -13,10 +13,14 @@ from app.core.exceptions import (
 from app.core.security import decode_access_token
 from app.db.dependencies import get_db
 from app.models.user import UserInDB
+from app.repositories.catalog_repository import CatalogRepository
 from app.repositories.session_repository import SessionRepository
+from app.repositories.template_repository import TemplateRepository
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService
+from app.services.catalog_service import CatalogService
 from app.services.google_auth_service import GoogleAuthService
+from app.services.template_service import TemplateService
 from app.services.token_service import TokenService
 
 # Bearer token extractor
@@ -101,12 +105,44 @@ async def get_current_active_user(
     return current_user
 
 
+async def get_catalog_repository(
+    db: Annotated[AsyncDatabase, Depends(get_db)],
+) -> CatalogRepository:
+    """Dependency for CatalogRepository."""
+    return CatalogRepository(db)
+
+
+async def get_template_repository(
+    db: Annotated[AsyncDatabase, Depends(get_db)],
+) -> TemplateRepository:
+    """Dependency for TemplateRepository."""
+    return TemplateRepository(db)
+
+
+async def get_catalog_service(
+    catalog_repo: Annotated[CatalogRepository, Depends(get_catalog_repository)],
+) -> CatalogService:
+    """Dependency for CatalogService."""
+    return CatalogService(catalog_repo=catalog_repo)
+
+
+async def get_template_service(
+    template_repo: Annotated[TemplateRepository, Depends(get_template_repository)],
+) -> TemplateService:
+    """Dependency for TemplateService."""
+    return TemplateService(template_repo=template_repo)
+
+
 # Type aliases for clean endpoint injections
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DatabaseDep = Annotated[AsyncDatabase, Depends(get_db)]
 UserRepoDep = Annotated[UserRepository, Depends(get_user_repository)]
 SessionRepoDep = Annotated[SessionRepository, Depends(get_session_repository)]
+CatalogRepoDep = Annotated[CatalogRepository, Depends(get_catalog_repository)]
+TemplateRepoDep = Annotated[TemplateRepository, Depends(get_template_repository)]
 TokenServiceDep = Annotated[TokenService, Depends(get_token_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 GoogleAuthServiceDep = Annotated[GoogleAuthService, Depends(get_google_auth_service)]
+CatalogServiceDep = Annotated[CatalogService, Depends(get_catalog_service)]
+TemplateServiceDep = Annotated[TemplateService, Depends(get_template_service)]
 CurrentUserDep = Annotated[UserInDB, Depends(get_current_user)]

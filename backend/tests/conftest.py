@@ -4,12 +4,23 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.api.dependencies import get_session_repository, get_user_repository
+from app.api.dependencies import (
+    get_catalog_repository,
+    get_session_repository,
+    get_template_repository,
+    get_user_repository,
+)
 from app.core.config import Settings, get_settings
 from app.db.mongodb import mongo_manager
 from app.main import create_application
 from app.services.rate_limiter import rate_limiter
-from tests.fakes import FakeSessionRepository, FakeUserRepository
+from tests.fakes import (
+    FakeCatalogRepository,
+    FakeSessionRepository,
+    FakeTemplateRepository,
+    FakeUserRepository,
+    populate_fake_catalog,
+)
 
 
 @pytest.fixture(scope="session")
@@ -44,6 +55,30 @@ def fake_session_repo() -> FakeSessionRepository:
     return FakeSessionRepository()
 
 
+@pytest.fixture
+def fake_catalog_repo() -> FakeCatalogRepository:
+    """Isolated in-memory catalog repository populated with default data."""
+    repo = FakeCatalogRepository()
+    return repo
+
+
+@pytest.fixture
+def fake_template_repo() -> FakeTemplateRepository:
+    """Isolated in-memory template repository populated with default data."""
+    repo = FakeTemplateRepository()
+    return repo
+
+
+@pytest.fixture(autouse=True)
+def setup_default_catalogs(
+    fake_catalog_repo: FakeCatalogRepository,
+    fake_template_repo: FakeTemplateRepository,
+):
+    """Seed fake repositories before each test unless explicitly cleared."""
+    populate_fake_catalog(fake_catalog_repo, fake_template_repo)
+    yield
+
+
 @pytest.fixture(autouse=True)
 def reset_rate_limiter():
     """Clear in-memory rate limiter buckets before and after each test."""
@@ -57,12 +92,16 @@ def app(
     test_settings: Settings,
     fake_user_repo: FakeUserRepository,
     fake_session_repo: FakeSessionRepository,
+    fake_catalog_repo: FakeCatalogRepository,
+    fake_template_repo: FakeTemplateRepository,
 ):
     """FastAPI test app instance with overridden dependencies."""
     application = create_application()
     application.dependency_overrides[get_settings] = lambda: test_settings
     application.dependency_overrides[get_user_repository] = lambda: fake_user_repo
     application.dependency_overrides[get_session_repository] = lambda: fake_session_repo
+    application.dependency_overrides[get_catalog_repository] = lambda: fake_catalog_repo
+    application.dependency_overrides[get_template_repository] = lambda: fake_template_repo
     return application
 
 
