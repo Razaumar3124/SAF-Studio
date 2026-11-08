@@ -30,7 +30,7 @@ class Settings(BaseSettings):
         description="MongoDB database name",
     )
     MONGODB_TIMEOUT_MS: int = Field(
-        default=5000,
+        default=10000,
         description="Connection and server selection timeout in milliseconds",
     )
 
@@ -261,6 +261,23 @@ class Settings(BaseSettings):
         default=50000,
         description="Maximum daily token consumption allowance across application",
     )
+
+    @field_validator("MONGODB_URL")
+    @classmethod
+    def validate_mongodb_url(cls, v: str) -> str:
+        url = v.strip()
+        if not (url.startswith("mongodb://") or url.startswith("mongodb+srv://")):
+            raise ValueError(
+                "MONGODB_URL must begin with either 'mongodb://' (local/standard) "
+                "or 'mongodb+srv://' (MongoDB Atlas SRV connection string)"
+            )
+        for placeholder in ("<password>", "<db_password>", "<username>"):
+            if placeholder in url:
+                raise ValueError(
+                    f"MONGODB_URL contains unresolved placeholder '{placeholder}'. "
+                    "Please replace it with your actual MongoDB Atlas database credentials."
+                )
+        return url
 
     @field_validator("BUSINESS_WHATSAPP_NUMBER")
     @classmethod

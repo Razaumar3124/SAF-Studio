@@ -56,6 +56,7 @@ def test_settings() -> Settings:
         PASSWORD_RESET_TOKEN_EXPIRE_MINUTES=60,
         GOOGLE_CLIENT_ID="test-google-client-id.apps.googleusercontent.com",
         EMAIL_PROVIDER="mock",
+        BUSINESS_WHATSAPP_NUMBER="919876543210",
     )
 
 

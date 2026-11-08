@@ -1,9 +1,11 @@
 import logging
 import time
+from typing import Any
 
+import certifi
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
-from pymongo.errors import ConnectionFailure, PyMongoError, ServerSelectionTimeoutError
+from pymongo.errors import ConnectionFailure, OperationFailure, PyMongoError, ServerSelectionTimeoutError
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import DatabaseUnavailableException
@@ -30,22 +32,41 @@ class MongoManager:
         self._database_name = cfg.DATABASE_NAME
 
         masked_url = sanitize_sensitive_data(cfg.MONGODB_URL)
+        is_atlas_or_tls = (
+            cfg.MONGODB_URL.startswith("mongodb+srv://")
+            or "tls=true" in cfg.MONGODB_URL.lower()
+            or "ssl=true" in cfg.MONGODB_URL.lower()
+        )
         logger.info(
-            "Initializing PyMongo Async client for database '%s' at %s",
+            "Initializing PyMongo Async client for database '%s' at %s (TLS: %s)",
             self._database_name,
             masked_url,
+            is_atlas_or_tls,
         )
 
-        self.client = AsyncMongoClient(
-            cfg.MONGODB_URL,
-            serverSelectionTimeoutMS=cfg.MONGODB_TIMEOUT_MS,
-            connectTimeoutMS=cfg.MONGODB_TIMEOUT_MS,
-            minPoolSize=5,
-            maxPoolSize=50,
-            uuidRepresentation="standard",
-        )
-        self.db = self.client[self._database_name]
-        logger.info("PyMongo Async client initialized successfully")
+        client_kwargs: dict[str, Any] = {
+            "serverSelectionTimeoutMS": cfg.MONGODB_TIMEOUT_MS,
+            "connectTimeoutMS": cfg.MONGODB_TIMEOUT_MS,
+            "minPoolSize": 1,
+            "maxPoolSize": 25,
+            "maxIdleTimeMS": 45000,
+            "uuidRepresentation": "standard",
+            "retryWrites": True,
+        }
+
+        if is_atlas_or_tls:
+            client_kwargs["tlsCAFile"] = certifi.where()
+
+        try:
+            self.client = AsyncMongoClient(cfg.MONGODB_URL, **client_kwargs)
+            self.db = self.client[self._database_name]
+            logger.info("PyMongo Async client connection pool configured successfully")
+        except PyMongoError as err:
+            logger.error("Failed to initialize PyMongo Async client: %s", err)
+            raise DatabaseUnavailableException(
+                message="Failed to initialize MongoDB client",
+                issue=str(err),
+            ) from err
 
     async def disconnect(self) -> None:
         """Close the AsyncMongoClient connection pool cleanly."""
