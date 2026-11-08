@@ -1,6 +1,7 @@
 import os
 
 os.environ["ENVIRONMENT"] = "test"
+os.environ["EMAIL_PROVIDER"] = "mock"
 
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, patch
@@ -54,6 +55,7 @@ def test_settings() -> Settings:
         REFRESH_TOKEN_EXPIRE_DAYS=14,
         PASSWORD_RESET_TOKEN_EXPIRE_MINUTES=60,
         GOOGLE_CLIENT_ID="test-google-client-id.apps.googleusercontent.com",
+        EMAIL_PROVIDER="mock",
     )
 
 

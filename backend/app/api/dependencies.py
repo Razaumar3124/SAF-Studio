@@ -115,7 +115,12 @@ async def get_current_user(
 
     if user.password_changed_at:
         token_iat = datetime.fromtimestamp(payload.get("iat", 0), tz=UTC)
-        if token_iat < user.password_changed_at - timedelta(seconds=1):
+        pwd_changed = (
+            user.password_changed_at.replace(tzinfo=UTC)
+            if user.password_changed_at.tzinfo is None
+            else user.password_changed_at
+        )
+        if token_iat < pwd_changed:
             raise TokenRevokedException("Access token invalidated due to password change.")
 
     return user

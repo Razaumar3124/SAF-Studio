@@ -181,6 +181,24 @@ class EmailService:
                     issue="Missing RESEND_API_KEY",
                 )
 
+            # Enforce Resend Testing Mode recipient restriction
+            if settings.RESEND_TEST_MODE:
+                allowed_recipient = (settings.RESEND_TEST_RECIPIENT or "").strip().lower()
+                norm_to_email = to_email.strip().lower()
+                if allowed_recipient and norm_to_email != allowed_recipient:
+                    logger.warning(
+                        "Resend testing mode restriction blocked dispatch to '%s'. Only '%s' is permitted.",
+                        to_email,
+                        allowed_recipient,
+                    )
+                    raise EmailDeliveryException(
+                        message=(
+                            f"In development testing mode, emails can only be sent to {allowed_recipient}. "
+                            "Please verify a custom domain at resend.com/domains to send to other recipients."
+                        ),
+                        issue=f"Recipient not allowed in Resend test mode (allowed: {allowed_recipient})",
+                    )
+
             payload = {
                 "from": settings.RESEND_FROM_EMAIL,
                 "to": [to_email],
@@ -203,17 +221,42 @@ class EmailService:
                     )
 
                 if resp.status_code in (200, 201):
-                    logger.info("Password reset OTP email dispatched successfully via Resend")
+                    logger.info("Verification OTP email dispatched successfully via Resend to %s", to_email)
                     return True
 
+                # Parse Resend response safely without leaking credentials or raw payloads
+                error_message = "Failed to deliver verification code via email."
+                issue_summary = f"Resend HTTP {resp.status_code}"
+                try:
+                    resend_json = resp.json()
+                    resend_msg = resend_json.get("message", "")
+                    if resp.status_code == 403 and "testing emails" in resend_msg.lower():
+                        error_message = (
+                            f"Resend is in testing mode and can only deliver to the verified account owner "
+                            f"({settings.RESEND_TEST_RECIPIENT}). "
+                            "Please verify a custom domain at resend.com/domains to send to other recipients."
+                        )
+                        issue_summary = "Resend 403 testing recipient restriction"
+                    elif resp.status_code == 422:
+                        error_message = "Email delivery service rejected recipient address format."
+                        issue_summary = "Resend 422 validation error"
+                    elif resp.status_code == 429:
+                        error_message = "Email delivery rate limit reached. Please wait a moment and try again."
+                        issue_summary = "Resend 429 rate limit exceeded"
+                    elif resp.status_code == 401:
+                        error_message = "Email delivery service authentication error."
+                        issue_summary = "Resend 401 unauthorized"
+                except Exception:
+                    pass
+
                 logger.error(
-                    "Resend API rejected delivery: status=%d response=%s",
+                    "Resend API delivery rejected: status=%d issue=%s",
                     resp.status_code,
-                    resp.text,
+                    issue_summary,
                 )
                 raise EmailDeliveryException(
-                    message="Failed to deliver verification code via email.",
-                    issue=f"Resend HTTP {resp.status_code}",
+                    message=error_message,
+                    issue=issue_summary,
                 )
 
             except httpx.TimeoutException as exc:
@@ -226,7 +269,7 @@ class EmailService:
                 logger.error("Resend connection error: %s", exc)
                 raise EmailDeliveryException(
                     message="Network error communicating with email provider.",
-                    issue=str(exc),
+                    issue="Connection error communicating with email provider",
                 ) from exc
 
         logger.error("Unknown EMAIL_PROVIDER: %s", settings.EMAIL_PROVIDER)
@@ -267,12 +310,16 @@ class EmailService:
                     )
                 latency = round((time.perf_counter() - start) * 1000, 2)
                 if resp.status_code == 200:
-                    return {
+                    health_info: dict[str, Any] = {
                         "status": "ready",
                         "provider": "resend",
                         "from_email": settings.RESEND_FROM_EMAIL,
                         "latency_ms": latency,
+                        "test_mode": settings.RESEND_TEST_MODE,
                     }
+                    if settings.RESEND_TEST_MODE:
+                        health_info["test_recipient"] = settings.RESEND_TEST_RECIPIENT
+                    return health_info
                 return {
                     "status": "degraded",
                     "provider": "resend",

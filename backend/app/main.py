@@ -25,7 +25,8 @@ logger = logging.getLogger("saf_studio.app")
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan context managing startup and shutdown tasks."""
-    settings: Settings = get_settings()
+    override = app.dependency_overrides.get(get_settings)
+    settings: Settings = override() if override else get_settings()
 
     # 1. Setup structured logging
     setup_logging(

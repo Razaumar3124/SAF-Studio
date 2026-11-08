@@ -126,6 +126,14 @@ class Settings(BaseSettings):
         default="SAF Studio <onboarding@resend.dev>",
         description="Configured sender email address for transactional recovery emails",
     )
+    RESEND_TEST_MODE: bool = Field(
+        default=True,
+        description="Whether Resend testing mode is enabled to restrict recipient delivery",
+    )
+    RESEND_TEST_RECIPIENT: str = Field(
+        default="abdurrazzakshaikh31@gmail.com",
+        description="Permitted testing recipient email during development when RESEND_TEST_MODE is enabled",
+    )
     EMAIL_OTP_EXPIRE_MINUTES: int = Field(
         default=10,
         description="Validity lifetime in minutes for 6-digit password reset OTP codes",
@@ -324,7 +332,7 @@ class Settings(BaseSettings):
         return True if self.is_production else self.COOKIE_SECURE
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=("backend/.env", ".env"),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
