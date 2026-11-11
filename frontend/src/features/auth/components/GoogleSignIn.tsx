@@ -8,6 +8,20 @@ import { loginWithGoogle } from '@/services/authApi'
 import { tokenStorage } from '@/services/tokenStorage'
 import { GoogleButton } from './GoogleButton'
 
+const MIN_GIS_BUTTON_WIDTH = 200
+const MAX_GIS_BUTTON_WIDTH = 400
+const DEFAULT_GIS_BUTTON_WIDTH = 320
+const RESIZE_DEBOUNCE_MS = 100
+
+/**
+ * Clamp the Google Identity Services button width to GIS's supported range [200, 400]
+ * while staying within the card's measured content width.
+ */
+function computeGisButtonWidth(containerWidth: number): number {
+  if (containerWidth <= 0) return DEFAULT_GIS_BUTTON_WIDTH
+  return Math.min(MAX_GIS_BUTTON_WIDTH, Math.max(MIN_GIS_BUTTON_WIDTH, Math.floor(containerWidth)))
+}
+
 export interface GoogleSignInProps {
   /**
    * Action context:
@@ -29,8 +43,12 @@ export function GoogleSignIn({ action = 'login' }: GoogleSignInProps) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasRenderedIframe, setHasRenderedIframe] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const buttonContainerRef = useRef<HTMLDivElement>(null)
   const inFlightRef = useRef(false)
+  const gisInitializedRef = useRef(false)
+  const lastRenderedWidthRef = useRef<number | null>(null)
+  const resizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const isRegister = action === 'register'
   const loadingText = isRegister ? 'Creating account…' : 'Signing in…'
@@ -88,6 +106,36 @@ export function GoogleSignIn({ action = 'login' }: GoogleSignInProps) {
     handleCredentialSuccessRef.current = handleCredentialSuccess
   }, [handleCredentialSuccess])
 
+  const renderGisButton = useCallback(() => {
+    const wrapper = wrapperRef.current
+    const container = buttonContainerRef.current
+    if (!wrapper || !container || !window.google?.accounts?.id) {
+      return false
+    }
+
+    const targetWidth = computeGisButtonWidth(wrapper.getBoundingClientRect().width)
+    if (lastRenderedWidthRef.current === targetWidth && container.children.length > 0) {
+      return true
+    }
+
+    container.innerHTML = ''
+    window.google.accounts.id.renderButton(container, {
+      type: 'standard',
+      theme: 'outline',
+      size: 'large',
+      text: 'continue_with',
+      shape: 'rectangular',
+      logo_alignment: 'center',
+      width: targetWidth,
+      locale: 'en',
+    })
+    lastRenderedWidthRef.current = targetWidth
+    if (container.children.length > 0) {
+      setHasRenderedIframe(true)
+    }
+    return true
+  }, [])
+
   useEffect(() => {
     const clientId = env.googleClientId
     if (!clientId) return
@@ -98,44 +146,31 @@ export function GoogleSignIn({ action = 'login' }: GoogleSignInProps) {
       }
 
       try {
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: (response) => {
-            if (response.credential) {
-              void handleCredentialSuccessRef.current(response.credential)
-            } else {
-              setError('No credentials received from Google. Please try again.')
-            }
-          },
-          auto_select: false,
-          cancel_on_tap_outside: true,
-        })
-
-        if (buttonContainerRef.current) {
-          buttonContainerRef.current.innerHTML = ''
-          window.google.accounts.id.renderButton(buttonContainerRef.current, {
-            type: 'standard',
-            theme: 'outline',
-            size: 'large',
-            text: 'continue_with',
-            shape: 'rectangular',
-            logo_alignment: 'center',
-            width: 380,
-            locale: 'en',
+        if (!gisInitializedRef.current) {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: (response) => {
+              if (response.credential) {
+                void handleCredentialSuccessRef.current(response.credential)
+              } else {
+                setError('No credentials received from Google. Please try again.')
+              }
+            },
+            auto_select: false,
+            cancel_on_tap_outside: true,
           })
-          if (buttonContainerRef.current.children.length > 0) {
-            setHasRenderedIframe(true)
-          }
+          gisInitializedRef.current = true
         }
 
+        renderGisButton()
         return true
       } catch {
         return false
       }
     }
 
-    let interval: NodeJS.Timeout | number | undefined
-    let timeout: NodeJS.Timeout | number | undefined
+    let interval: ReturnType<typeof setInterval> | undefined
+    let timeout: ReturnType<typeof setTimeout> | undefined
 
     if (!setupGis()) {
       interval = setInterval(() => {
@@ -146,11 +181,39 @@ export function GoogleSignIn({ action = 'login' }: GoogleSignInProps) {
       timeout = setTimeout(() => clearInterval(interval), 5000)
     }
 
+    const handleContainerResize = () => {
+      if (!gisInitializedRef.current || !wrapperRef.current) return
+      if (wrapperRef.current.getBoundingClientRect().width <= 0) return
+
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current)
+      resizeTimeoutRef.current = setTimeout(() => {
+        renderGisButton()
+      }, RESIZE_DEBOUNCE_MS)
+    }
+
+    let observer: ResizeObserver | undefined
+    if (typeof ResizeObserver !== 'undefined' && wrapperRef.current) {
+      observer = new ResizeObserver(handleContainerResize)
+      observer.observe(wrapperRef.current)
+    } else if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleContainerResize)
+    }
+
     return () => {
       if (interval) clearInterval(interval)
       if (timeout) clearTimeout(timeout)
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current)
+        resizeTimeoutRef.current = undefined
+      }
+      observer?.disconnect()
+      if (!observer && typeof window !== 'undefined') {
+        window.removeEventListener('resize', handleContainerResize)
+      }
+      gisInitializedRef.current = false
+      lastRenderedWidthRef.current = null
     }
-  }, [])
+  }, [renderGisButton])
 
   const handleButtonClick = () => {
     if (!env.googleClientId) {
@@ -175,11 +238,11 @@ export function GoogleSignIn({ action = 'login' }: GoogleSignInProps) {
     <div className="flex flex-col gap-3">
       {error && <Alert tone="error">{error}</Alert>}
 
-      <div className="relative flex justify-center w-full min-h-[44px]">
+      <div ref={wrapperRef} className="relative flex min-h-[44px] w-full items-center justify-center">
         {/* Official Google Identity Services button container */}
         <div
           ref={buttonContainerRef}
-          className={hasRenderedIframe && !submitting ? 'w-full flex justify-center' : 'hidden'}
+          className={hasRenderedIframe && !submitting ? 'flex w-full max-w-full justify-center' : 'hidden'}
         />
 
         {/* Fallback button when GIS is loading, not initialized, iframe not inserted, or submitting */}
