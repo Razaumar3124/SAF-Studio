@@ -298,6 +298,12 @@ class AuthService:
                 await self.email_quota.refund_send()
                 await self.email_quota.refund_recipient_allowance(email)
             raise
+        except BaseException:
+            # Unexpected failure or cancellation: the reservation must not leak. Over-refunding in
+            # this rare case is preferable to permanently losing daily allowance.
+            await self.email_quota.refund_send()
+            await self.email_quota.refund_recipient_allowance(email)
+            raise
 
     async def initiate_password_recovery(
         self,
@@ -324,16 +330,17 @@ class AuthService:
                 details=[{"field": "otp", "issue": "Code expired or not found"}],
             )
 
-        if active_otp.attempts >= active_otp.max_attempts:
+        # Reserve the attempt atomically BEFORE comparing the code, so concurrent guesses count.
+        claimed = await self.session_repo.claim_otp_attempt(active_otp.id, active_otp.max_attempts)
+        if claimed is None:
             raise ValidationException(
                 message="Maximum verification attempts exceeded. Please request a new code.",
                 details=[{"field": "otp", "issue": "Max attempts exceeded"}],
             )
 
-        is_valid = verify_otp_hash(req.email, req.otp, active_otp.token_hash)
+        is_valid = verify_otp_hash(req.email, req.otp, claimed.token_hash)
         if not is_valid:
-            new_attempts = await self.session_repo.increment_otp_attempts(active_otp.id)
-            remaining = max(0, active_otp.max_attempts - new_attempts)
+            remaining = max(0, claimed.max_attempts - claimed.attempts)
             if remaining == 0:
                 raise ValidationException(
                     message="Maximum verification attempts exceeded. Please request a new code.",

@@ -2,7 +2,6 @@ from fastapi import (
     APIRouter,
     File,
     Query,
-    Request,
     Response,
     UploadFile,
     status,
@@ -61,7 +60,6 @@ router = APIRouter(prefix="/photos", tags=["Photos"])
     ),
 )
 async def upload_photo(
-    request: Request,
     photo_service: PhotoServiceDep,
     current_user: CurrentUserDep,
     settings: SettingsDep,
@@ -80,14 +78,12 @@ async def upload_photo(
         f"That photo is larger than {settings.PHOTO_MAX_UPLOAD_MB} MB. "
         "Please choose a smaller file.",
     )
-    client_ip = request.client.host if request.client else None
 
     return await photo_service.upload_photo(
         user_id=current_user.id,
         filename=file.filename,
         file_bytes=file_bytes,
         declared_content_type=file.content_type,
-        client_ip=client_ip,
     )
 
 

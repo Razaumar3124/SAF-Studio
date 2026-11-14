@@ -74,6 +74,7 @@ class FakeUserRepository:
             now = datetime.now(UTC)
             self.users[str(user_id)]["password_hash"] = password_hash
             self.users[str(user_id)]["password_changed_at"] = now
+            self.users[str(user_id)]["email_verified"] = True
             self.users[str(user_id)]["updated_at"] = now
 
 
@@ -158,14 +159,24 @@ class FakeSessionRepository:
             ):
                 doc["used"] = True
 
-    async def increment_otp_attempts(self, reset_id: str) -> int:
+    async def claim_otp_attempt(self, reset_id: str, max_attempts: int) -> PasswordResetInDB | None:
+        # No await between the check and the increment, so this is atomic in the event loop.
+        now = datetime.now(UTC)
         for doc in self.password_resets.values():
-            if str(doc["_id"]) == str(reset_id):
-                doc["attempts"] = doc.get("attempts", 0) + 1
-                if doc["attempts"] >= doc.get("max_attempts", 3):
-                    doc["used"] = True
-                return doc["attempts"]
-        return 3
+            if str(doc["_id"]) != str(reset_id):
+                continue
+            if (
+                doc.get("purpose") != "email_otp"
+                or doc.get("used", False)
+                or doc["expires_at"] <= now
+                or doc.get("attempts", 0) >= max_attempts
+            ):
+                return None
+            doc["attempts"] = doc.get("attempts", 0) + 1
+            if doc["attempts"] >= doc.get("max_attempts", max_attempts):
+                doc["used"] = True
+            return PasswordResetInDB(**doc)
+        return None
 
     async def consume_otp_atomically(self, reset_id: str) -> bool:
         for doc in self.password_resets.values():
@@ -776,7 +787,6 @@ class FakeDesignRepository:
         design_versions = [v for v in self.versions.values() if str(v.get("design_id")) == did]
         design_versions.sort(key=lambda x: x.get("version_number", 0), reverse=True)
         return [DesignVersionInDB(**v) for v in design_versions]
-
 
     async def prune_versions(
         self, design_id: str, keep_latest: int, current_version_id: str

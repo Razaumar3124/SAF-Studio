@@ -226,11 +226,21 @@ async def test_delete_legacy_photo_uses_object_sizes():
     now = datetime.now(UTC)
     await photos.create(
         PhotoInDB(
-            id=photo_id, user_id=user_id, original_filename="old.jpg",
-            storage_key=f"{base}/original.jpg", preview_key=f"{base}/preview.webp",
-            thumbnail_key=f"{base}/thumbnail.webp", bucket="b", mime_type="image/jpeg",
-            file_size_bytes=9000, width_px=800, height_px=600, aspect_ratio=1.33,
-            suggested_orientation="landscape", created_at=now, updated_at=now,
+            id=photo_id,
+            user_id=user_id,
+            original_filename="old.jpg",
+            storage_key=f"{base}/original.jpg",
+            preview_key=f"{base}/preview.webp",
+            thumbnail_key=f"{base}/thumbnail.webp",
+            bucket="b",
+            mime_type="image/jpeg",
+            file_size_bytes=9000,
+            width_px=800,
+            height_px=600,
+            aspect_ratio=1.33,
+            suggested_orientation="landscape",
+            created_at=now,
+            updated_at=now,
         )
     )
     service = PhotoService(photos, ImageProcessingService(), r2, StorageQuotaService(usage, r2))
@@ -252,11 +262,22 @@ async def test_per_user_storage_limit(client: AsyncClient, fake_photo_repo: Fake
     now = datetime.now(UTC)
     await fake_photo_repo.create(
         PhotoInDB(
-            id=str(ObjectId()), user_id=user["id"], original_filename="big.jpg",
-            storage_key="k1", preview_key="k2", thumbnail_key="k3", bucket="b",
-            mime_type="image/jpeg", file_size_bytes=limit, stored_bytes=limit,
-            width_px=4000, height_px=3000, aspect_ratio=1.33,
-            suggested_orientation="landscape", created_at=now, updated_at=now,
+            id=str(ObjectId()),
+            user_id=user["id"],
+            original_filename="big.jpg",
+            storage_key="k1",
+            preview_key="k2",
+            thumbnail_key="k3",
+            bucket="b",
+            mime_type="image/jpeg",
+            file_size_bytes=limit,
+            stored_bytes=limit,
+            width_px=4000,
+            height_px=3000,
+            aspect_ratio=1.33,
+            suggested_orientation="landscape",
+            created_at=now,
+            updated_at=now,
         )
     )
 

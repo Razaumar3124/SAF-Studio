@@ -164,6 +164,36 @@ class InvalidGoogleTokenException(AppException):
         )
 
 
+class GoogleSignInUnavailableException(AppException):
+    """Raised when Google sign-in is requested but the server has no GOOGLE_CLIENT_ID configured."""
+
+    def __init__(self, message: str = "Google sign-in is not available right now."):
+        super().__init__(
+            message=message,
+            code="GOOGLE_SIGNIN_UNAVAILABLE",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            details=[],
+        )
+
+
+class GoogleLinkRequiresVerificationException(AppException):
+    """Raised when a Google sign-in matches an existing password account whose email is unproven."""
+
+    def __init__(
+        self,
+        message: str = (
+            "An account with this email already exists. Reset your password to verify the "
+            "email address, then you can sign in with Google."
+        ),
+    ):
+        super().__init__(
+            message=message,
+            code="GOOGLE_LINK_REQUIRES_VERIFICATION",
+            status_code=status.HTTP_409_CONFLICT,
+            details=[],
+        )
+
+
 class RateLimitExceededException(AppException):
     """Raised when a client exceeds rate limits."""
 
@@ -204,8 +234,7 @@ class EmailQuotaExceededException(AppException):
 
     MESSAGES = {
         "day": (
-            "We've reached today's limit for sending verification codes. "
-            "Please try again tomorrow."
+            "We've reached today's limit for sending verification codes. Please try again tomorrow."
         ),
         "month": (
             "We've reached this month's limit for sending verification codes. "

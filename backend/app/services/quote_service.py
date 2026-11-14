@@ -400,7 +400,6 @@ class QuoteService:
 
     async def get_quote_by_id(self, quote_id: str, current_user: UserInDB) -> QuoteDetailResponse:
         """Authorized retrieval of quote by ID for the owner customer."""
-        settings = get_settings()
         quote = await self.quote_repo.get_by_id(quote_id)
         if not quote:
             raise ResourceNotFoundException(
@@ -436,7 +435,6 @@ class QuoteService:
             wall_size=wall_size,
             frame_count=len(quote.frames),
             finish_summary=finish_summary,
-            report_url=f"{settings.PUBLIC_APP_URL}/q/{quote.share_token_prefix}",
             preview_url=preview_url,
             customer_name=quote.customer.full_name,
             customer_phone=quote.customer.phone,
@@ -461,9 +459,7 @@ class QuoteService:
         # Check expiration
         now = datetime.now(UTC)
         quote_expires_at = (
-            quote.expires_at
-            if quote.expires_at.tzinfo
-            else quote.expires_at.replace(tzinfo=UTC)
+            quote.expires_at if quote.expires_at.tzinfo else quote.expires_at.replace(tzinfo=UTC)
         )
         if now > quote_expires_at:
             raise ResourceNotFoundException(

@@ -59,6 +59,7 @@ async def test_google_auth_link_existing_user_success(
         role="customer",
         is_active=True,
         google_id=None,
+        email_verified=True,  # proven earlier (e.g. by an emailed OTP reset)
         created_at=now,
         updated_at=now,
     )
@@ -190,3 +191,109 @@ async def test_google_auth_conflicting_google_id_returns_401(
         response = await client.post("/api/v1/auth/google", json=payload)
         assert response.status_code == 401
         assert response.json()["error"]["code"] == "INVALID_GOOGLE_TOKEN"
+
+
+def _local_user(email: str, *, email_verified: bool):
+    from datetime import UTC, datetime
+
+    from bson import ObjectId
+
+    from app.core.security import hash_password
+    from app.models.user import UserInDB
+
+    now = datetime.now(UTC)
+    return UserInDB(
+        _id=str(ObjectId()),
+        email=email,
+        phone=None,
+        password_hash=hash_password("Password123!"),
+        full_name="Pre Registered",
+        role="customer",
+        is_active=True,
+        email_verified=email_verified,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.mark.asyncio
+async def test_google_link_refused_for_unverified_password_account(
+    client: AsyncClient, fake_user_repo: FakeUserRepository
+):
+    """Anti pre-hijacking: an unproven local account must not gain a Google sign-in path."""
+    await fake_user_repo.create(_local_user("victim@example.com", email_verified=False))
+    mock_id_info = {
+        "sub": "google-attacker-sub",
+        "email": "victim@example.com",
+        "email_verified": True,
+        "name": "Victim",
+    }
+
+    with patch("google.oauth2.id_token.verify_oauth2_token", return_value=mock_id_info):
+        res = await client.post(
+            "/api/v1/auth/google", json={"id_token": "valid_mock_google_id_token"}
+        )
+
+    assert res.status_code == 409
+    assert res.json()["error"]["code"] == "GOOGLE_LINK_REQUIRES_VERIFICATION"
+    stored = await fake_user_repo.get_by_email("victim@example.com")
+    assert stored.google_id is None
+
+
+@pytest.mark.asyncio
+async def test_google_verifies_audience_against_configured_client_id(client: AsyncClient):
+    """The ID token must be verified for OUR OAuth client id (audience), never without one."""
+    mock_id_info = {
+        "sub": "sub-aud",
+        "email": "aud@example.com",
+        "email_verified": True,
+        "name": "Aud User",
+    }
+    with patch("google.oauth2.id_token.verify_oauth2_token", return_value=mock_id_info) as verify:
+        res = await client.post(
+            "/api/v1/auth/google", json={"id_token": "valid_mock_google_id_token"}
+        )
+
+    assert res.status_code == 200
+    from app.core.config import get_settings
+
+    assert verify.call_args.kwargs["audience"] == get_settings().GOOGLE_CLIENT_ID.strip()
+    assert verify.call_args.kwargs["audience"]  # never empty: the check cannot be skipped
+
+
+@pytest.mark.asyncio
+async def test_google_signin_unavailable_without_client_id(client: AsyncClient):
+    """Without GOOGLE_CLIENT_ID the server must refuse Google sign-in, not skip the check."""
+    from app.services import google_auth_service as module
+
+    settings = module.get_settings().model_copy(update={"GOOGLE_CLIENT_ID": ""})
+    with (
+        patch.object(module, "get_settings", return_value=settings),
+        patch("google.oauth2.id_token.verify_oauth2_token") as verify,
+    ):
+        res = await client.post(
+            "/api/v1/auth/google", json={"id_token": "valid_mock_google_id_token"}
+        )
+
+    assert res.status_code == 503
+    assert res.json()["error"]["code"] == "GOOGLE_SIGNIN_UNAVAILABLE"
+    verify.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_google_created_user_is_email_verified(
+    client: AsyncClient, fake_user_repo: FakeUserRepository
+):
+    mock_id_info = {
+        "sub": "sub-new-verified",
+        "email": "new.verified@example.com",
+        "email_verified": True,
+        "name": "New Verified",
+    }
+    with patch("google.oauth2.id_token.verify_oauth2_token", return_value=mock_id_info):
+        res = await client.post(
+            "/api/v1/auth/google", json={"id_token": "valid_mock_google_id_token"}
+        )
+    assert res.status_code == 200
+    user = await fake_user_repo.get_by_email("new.verified@example.com")
+    assert user.email_verified is True

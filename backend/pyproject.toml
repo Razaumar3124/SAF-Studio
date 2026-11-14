@@ -55,6 +55,10 @@ select = [
 ]
 ignore = ["B008"]
 
+[tool.ruff.lint.per-file-ignores]
+# Standalone operator scripts adjust sys.path before importing the app package.
+"scripts/*" = ["E402", "E501"]
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]

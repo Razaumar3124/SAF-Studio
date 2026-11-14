@@ -199,16 +199,18 @@ describe('RegisterForm', () => {
     window.google = {
       accounts: {
         id: {
-          initialize: vi.fn((config) => {
-            googleCallback = config.callback
-          }),
-          renderButton: vi.fn(),
-          prompt: vi.fn(() => {
+          initialize: vi.fn<(config: { callback: (res: { credential?: string }) => void }) => void>(
+            (config) => {
+              googleCallback = config.callback
+            },
+          ),
+          renderButton: vi.fn<(...args: unknown[]) => unknown>(),
+          prompt: vi.fn<() => void>(() => {
             if (googleCallback) {
               googleCallback({ credential: 'valid-google-id-token' })
             }
           }),
-          cancel: vi.fn(),
+          cancel: vi.fn<(...args: unknown[]) => unknown>(),
         },
       },
     }
@@ -233,16 +235,18 @@ describe('RegisterForm', () => {
     window.google = {
       accounts: {
         id: {
-          initialize: vi.fn((config) => {
-            googleCallback = config.callback
-          }),
-          renderButton: vi.fn(),
-          prompt: vi.fn(() => {
+          initialize: vi.fn<(config: { callback: (res: { credential?: string }) => void }) => void>(
+            (config) => {
+              googleCallback = config.callback
+            },
+          ),
+          renderButton: vi.fn<(...args: unknown[]) => unknown>(),
+          prompt: vi.fn<() => void>(() => {
             if (googleCallback) {
               googleCallback({ credential: 'forged-or-expired-token' })
             }
           }),
-          cancel: vi.fn(),
+          cancel: vi.fn<(...args: unknown[]) => unknown>(),
         },
       },
     }

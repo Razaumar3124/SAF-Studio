@@ -116,9 +116,7 @@ async def test_atlas_storage_quota_error_returns_friendly_507(
     client: AsyncClient, fake_design_repo: FakeDesignRepository, monkeypatch
 ):
     async def over_quota(_design):
-        raise WriteError(
-            "you are over your space quota, using 513 MB of 512 MB", code=8000
-        )
+        raise WriteError("you are over your space quota, using 513 MB of 512 MB", code=8000)
 
     monkeypatch.setattr(fake_design_repo, "create_design", over_quota)
     _, token = await register_test_user(client, "atlasfull@example.com")

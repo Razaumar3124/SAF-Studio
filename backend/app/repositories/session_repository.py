@@ -160,25 +160,36 @@ class SessionRepository:
             {"$set": {"used": True}},
         )
 
-    async def increment_otp_attempts(self, reset_id: str) -> int:
-        """Atomically increment failed OTP attempt counter and return new count."""
+    async def claim_otp_attempt(self, reset_id: str, max_attempts: int) -> PasswordResetInDB | None:
+        """Atomically reserve one verification attempt for an active OTP challenge.
+
+        The attempt counter is incremented in the same conditional update that checks it is still
+        below the limit, so concurrent guesses cannot all read the same count and slip past it.
+        Returns the updated challenge (with the new attempt count), or None if the challenge is
+        exhausted, used or expired.
+        """
         if not ObjectId.is_valid(reset_id):
-            return 3
-        updated = await self.password_resets.find_one_and_update(
-            {"_id": ObjectId(reset_id)},
+            return None
+        now = datetime.now(UTC)
+        doc = await self.password_resets.find_one_and_update(
+            {
+                "_id": ObjectId(reset_id),
+                "purpose": "email_otp",
+                "used": False,
+                "expires_at": {"$gt": now},
+                "attempts": {"$lt": max_attempts},
+            },
             {"$inc": {"attempts": 1}},
             return_document=ReturnDocument.AFTER,
         )
-        if not updated:
-            return 3
-        count = updated.get("attempts", 0)
-        max_attempts = updated.get("max_attempts", 3)
-        if count >= max_attempts:
+        if doc is None:
+            return None
+        if doc.get("attempts", 0) >= doc.get("max_attempts", max_attempts):
+            # Last allowed guess has been spent: lock the challenge for good.
             await self.password_resets.update_one(
-                {"_id": ObjectId(reset_id)},
-                {"$set": {"used": True}},
+                {"_id": ObjectId(reset_id)}, {"$set": {"used": True}}
             )
-        return count
+        return self._doc_to_password_reset(doc)
 
     async def consume_otp_atomically(self, reset_id: str) -> bool:
         """Atomically mark OTP as used. Returns True if consumed, False if already used."""

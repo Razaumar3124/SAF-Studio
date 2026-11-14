@@ -4,6 +4,9 @@ from typing import Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Public development-only signing key. Production refuses to start with it (validate_production).
+DEV_SECRET_KEY = "dev-insecure-secret-key-change-in-production-min-32-chars-saf-studio-2026"
+
 
 class Settings(BaseSettings):
     """Application configuration loaded from environment variables and .env file."""
@@ -48,8 +51,8 @@ class Settings(BaseSettings):
 
     # JWT & Authentication security
     SECRET_KEY: str = Field(
-        default="dev-insecure-secret-key-change-in-production-min-32-chars-saf-studio-2026",
-        description="Cryptographic secret key for signing JWT tokens",
+        default=DEV_SECRET_KEY,
+        description="Cryptographic secret key for signing JWT tokens (min 32 chars in production)",
     )
     JWT_ALGORITHM: str = Field(default="HS256", description="JWT signing algorithm")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
@@ -79,6 +82,16 @@ class Settings(BaseSettings):
     )
     COOKIE_DOMAIN: str | None = Field(
         default=None, description="Optional cookie domain restriction"
+    )
+
+    # Number of trusted reverse-proxy hops in front of the app (Render = 1). When > 0, the client IP
+    # is read from the X-Forwarded-For entry appended by the nearest trusted proxy. When 0 (local
+    # development), forwarded headers are ignored entirely so clients cannot spoof their IP.
+    TRUSTED_PROXY_HOPS: int = Field(
+        default=0,
+        ge=0,
+        le=5,
+        description="Trusted reverse-proxy hops for client IP (0 = ignore forwarded headers)",
     )
 
     # Google OAuth client ID
@@ -132,7 +145,7 @@ class Settings(BaseSettings):
     )
     RESEND_TEST_RECIPIENT: str = Field(
         default="",
-        description="Permitted testing recipient email during development when RESEND_TEST_MODE is enabled",
+        description="Permitted test recipient while RESEND_TEST_MODE is enabled",
     )
     EMAIL_DAILY_LIMIT: int = Field(
         default=100,
@@ -204,10 +217,6 @@ class Settings(BaseSettings):
         default="",
         description="Explicit S3 endpoint URL override (defaults to Cloudflare R2 standard)",
     )
-    R2_MAX_UPLOAD_MB: int = Field(
-        default=15,
-        description="Deprecated and ignored: use PHOTO_MAX_UPLOAD_MB",
-    )
     PHOTO_MAX_UPLOAD_MB: int = Field(
         default=15,
         ge=1,
@@ -243,8 +252,13 @@ class Settings(BaseSettings):
         description="Minimum object age before an unreferenced R2 object may be cleaned up",
     )
     STORAGE_MAINTENANCE_INTERVAL_HOURS: int = Field(
-        default=24,
-        description="Interval for background storage cleanup and reconciliation (0 disables it)",
+        default=0,
+        ge=0,
+        description=(
+            "Interval for in-process storage cleanup (0 disables it). On Render, run "
+            "scripts/storage_maintenance.py as a scheduled Cron Job instead: free instances sleep, "
+            "and in-process loops do not run while asleep."
+        ),
     )
     PHOTO_MAX_WIDTH_PX: int = Field(
         default=8192,
@@ -392,6 +406,41 @@ class Settings(BaseSettings):
             raise ValueError(
                 "RESEND_API_KEY must be provided when EMAIL_PROVIDER is set to 'resend'"
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_production(self) -> "Settings":
+        """Fail fast at startup when production would run with insecure or missing settings."""
+        if not self.is_production:
+            return self
+
+        problems: list[str] = []
+        if self.SECRET_KEY == DEV_SECRET_KEY or len(self.SECRET_KEY) < 32:
+            problems.append("SECRET_KEY must be set to a unique value of at least 32 characters")
+        if self.OTP_SECRET_KEY and len(self.OTP_SECRET_KEY) < 32:
+            problems.append("OTP_SECRET_KEY must be at least 32 characters when set")
+        if self.DEBUG:
+            problems.append("DEBUG must be false in production")
+        if self.EMAIL_PROVIDER != "resend":
+            problems.append("EMAIL_PROVIDER must be 'resend' in production")
+        if self.RESEND_TEST_MODE:
+            problems.append(
+                "RESEND_TEST_MODE must be false in production (verify a sending domain)"
+            )
+        if not self.GOOGLE_CLIENT_ID.strip():
+            problems.append("GOOGLE_CLIENT_ID must be set in production")
+        if self.TRUSTED_PROXY_HOPS < 1:
+            problems.append("TRUSTED_PROXY_HOPS must be 1 or more behind Render's proxy")
+        if not self.PUBLIC_APP_URL.startswith("https://") or "localhost" in self.PUBLIC_APP_URL:
+            problems.append("PUBLIC_APP_URL must be the public https:// URL")
+        if any(not o.startswith("https://") or "localhost" in o for o in self.CORS_ORIGINS):
+            problems.append("CORS_ORIGINS must contain only public https:// origins")
+        if "localhost" in self.MONGODB_URL or "127.0.0.1" in self.MONGODB_URL:
+            problems.append("MONGODB_URL must point to the cloud database, not localhost")
+        if not (self.R2_ACCOUNT_ID and self.R2_ACCESS_KEY_ID and self.R2_SECRET_ACCESS_KEY):
+            problems.append("R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are required")
+        if problems:
+            raise ValueError("Invalid production configuration: " + "; ".join(problems))
         return self
 
     @property

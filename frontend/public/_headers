@@ -1,0 +1,9 @@
+# Security headers for every response on Cloudflare Pages.
+# The app's CSP is a <meta> tag (vite.config.ts); frame-ancestors can only be set as a header.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Content-Security-Policy: frame-ancestors 'none'

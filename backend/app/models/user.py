@@ -29,6 +29,9 @@ class UserInDB(BaseModel):
     is_active: bool = Field(default=True)
     auth_provider: str = Field(default="local")
     google_id: str | None = None
+    # True once the account's email is proven (Google-verified, or completed an emailed OTP reset).
+    # Google sign-in may only link to an existing account when this is True (anti pre-hijacking).
+    email_verified: bool = Field(default=False)
     last_login_at: datetime | None = None
     password_changed_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

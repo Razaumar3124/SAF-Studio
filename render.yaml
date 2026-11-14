@@ -1,0 +1,55 @@
+# Render Blueprint TEMPLATE for the FastAPI backend. Not applied automatically: review it, then
+# create the service from this file in the Render dashboard. Secrets are declared with
+# `sync: false`, so their values are entered in Render and never stored in the repository.
+services:
+  - type: web
+    name: saf-studio-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install .
+    # No --proxy-headers flag: client IPs are resolved by the app (TRUSTED_PROXY_HOPS), so uvicorn
+    # must not rewrite request.client from forwarded headers.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health/live
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: RESEND_TEST_MODE
+        value: "false"
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: lax
+      - key: STORAGE_MAINTENANCE_INTERVAL_HOURS
+        value: "0"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: MONGODB_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false          # e.g. https://app.example.com (your Cloudflare Pages domain)
+      - key: PUBLIC_APP_URL
+        sync: false          # e.g. https://saf-studio-api.onrender.com (this service's URL)
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false

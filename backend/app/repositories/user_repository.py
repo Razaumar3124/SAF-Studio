@@ -102,6 +102,8 @@ class UserRepository:
                     "$set": {
                         "password_hash": password_hash,
                         "password_changed_at": now,
+                        # Only reachable after an emailed OTP was verified: the address is proven.
+                        "email_verified": True,
                         "updated_at": now,
                     }
                 },

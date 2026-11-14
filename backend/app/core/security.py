@@ -165,32 +165,24 @@ def normalize_phone(raw: str, default_country_code: str = "+91") -> str | None:
 
 
 def get_client_ip(request: Any) -> str | None:
-    """Extract client IP, inspecting trusted proxy headers if present.
+    """Resolve the client IP for rate limiting without trusting client-supplied headers.
 
-    Checks headers in order of specificity:
-    1. CF-Connecting-IP (Cloudflare)
-    2. X-Forwarded-For (client IP is first in comma-separated list)
-    3. X-Real-IP (standard reverse proxy)
-    4. Direct socket client host (request.client.host)
+    Forwarded headers are honoured only when TRUSTED_PROXY_HOPS > 0 (Render sits in front of the
+    app and appends the real client IP as the RIGHTMOST X-Forwarded-For entry). Leftmost entries
+    and CF-Connecting-IP/X-Real-IP are client-controlled, so they are never used. With no trusted
+    proxy configured, the direct socket peer is used.
     """
     if not request:
         return None
 
+    hops = get_settings().TRUSTED_PROXY_HOPS
     headers = getattr(request, "headers", None)
-    if headers:
-        cf_ip = headers.get("cf-connecting-ip")
-        if cf_ip and cf_ip.strip():
-            return cf_ip.strip()
-
-        x_forwarded = headers.get("x-forwarded-for")
-        if x_forwarded and x_forwarded.strip():
-            client_candidate = x_forwarded.split(",")[0].strip()
-            if client_candidate:
-                return client_candidate
-
-        real_ip = headers.get("x-real-ip")
-        if real_ip and real_ip.strip():
-            return real_ip.strip()
+    if hops > 0 and headers:
+        forwarded = headers.get("x-forwarded-for")
+        if forwarded:
+            chain = [part.strip() for part in forwarded.split(",") if part.strip()]
+            if len(chain) >= hops:
+                return chain[-hops]
 
     client = getattr(request, "client", None)
     return client.host if client else None

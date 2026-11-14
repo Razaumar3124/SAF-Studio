@@ -218,35 +218,87 @@ async def test_register_rate_limiting(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_register_proxy_headers_client_ip(client: AsyncClient):
-    """Test that CF-Connecting-IP and X-Forwarded-For isolate rate limits between proxy clients."""
-    # Register from IP 1
-    p1 = {
-        "full_name": "Proxy User Alpha",
-        "email": "proxy1@example.com",
-        "phone": "+919876543210",
-        "password": "Password123!",
-    }
-    res1 = await client.post(
-        "/api/v1/auth/register",
-        json=p1,
-        headers={"CF-Connecting-IP": "203.0.113.10"},
-    )
-    assert res1.status_code == 201
+async def test_register_ignores_spoofed_forwarded_headers_without_trusted_proxy(
+    client: AsyncClient,
+):
+    """Without a trusted proxy, rotating forwarded-IP headers must NOT escape the per-IP limit."""
+    names = ["Spoof One", "Spoof Two", "Spoof Three", "Spoof Four", "Spoof Five"]
+    for i, name in enumerate(names):
+        res = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "full_name": name,
+                "email": f"spoof{i}@example.com",
+                "phone": f"+9198765433{i:02d}",
+                "password": "Password123!",
+            },
+            headers={"X-Forwarded-For": f"203.0.113.{i + 10}", "CF-Connecting-IP": f"198.18.0.{i}"},
+        )
+        assert res.status_code == 201
 
-    # Register from IP 2 through same proxy
-    p2 = {
-        "full_name": "Proxy User Beta",
-        "email": "proxy2@example.com",
-        "phone": "+919876543211",
-        "password": "Password123!",
-    }
-    res2 = await client.post(
+    blocked = await client.post(
         "/api/v1/auth/register",
-        json=p2,
-        headers={"CF-Connecting-IP": "203.0.113.20"},
+        json={
+            "full_name": "Spoof Six",
+            "email": "spoof6@example.com",
+            "phone": "+919876543399",
+            "password": "Password123!",
+        },
+        headers={"X-Forwarded-For": "203.0.113.99"},
     )
-    assert res2.status_code == 201
+    assert blocked.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_register_uses_rightmost_forwarded_ip_with_trusted_proxy(
+    test_settings, client: AsyncClient
+):
+    """With one trusted proxy hop, the proxy-appended (rightmost) IP isolates clients."""
+    from unittest.mock import patch
+
+    trusted = test_settings.model_copy(update={"TRUSTED_PROXY_HOPS": 1})
+    with patch("app.core.security.get_settings", return_value=trusted):
+        await _run_trusted_proxy_checks(client)
+
+
+async def _run_trusted_proxy_checks(client: AsyncClient) -> None:
+    # Same proxy-appended client IP (rightmost) for 5 registrations, leftmost is attacker-chosen.
+    for i in range(5):
+        res = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "full_name": f"Trusted User {'ABCDE'[i]}",
+                "email": f"trusted{i}@example.com",
+                "phone": f"+9198765434{i:02d}",
+                "password": "Password123!",
+            },
+            headers={"X-Forwarded-For": f"10.0.0.{i}, 198.51.100.7"},
+        )
+        assert res.status_code == 201
+    blocked = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Trusted Blocked",
+            "email": "trusted-blocked@example.com",
+            "phone": "+919876543499",
+            "password": "Password123!",
+        },
+        headers={"X-Forwarded-For": "10.9.9.9, 198.51.100.7"},
+    )
+    assert blocked.status_code == 429
+
+    # A different real client (different proxy-appended IP) is still allowed.
+    other = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Other Client",
+            "email": "other-client@example.com",
+            "phone": "+919876543488",
+            "password": "Password123!",
+        },
+        headers={"X-Forwarded-For": "10.9.9.9, 198.51.100.8"},
+    )
+    assert other.status_code == 201
 
 
 @pytest.mark.asyncio

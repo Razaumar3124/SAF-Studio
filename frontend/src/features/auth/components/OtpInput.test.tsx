@@ -9,7 +9,7 @@ afterEach(() => {
 
 describe('OtpInput', () => {
   it('renders 6 input boxes with accessible labels', () => {
-    render(<OtpInput value="" onChange={vi.fn()} />)
+    render(<OtpInput value="" onChange={vi.fn<(...args: unknown[]) => unknown>()} />)
     const inputs = screen.getAllByRole('textbox') as HTMLInputElement[]
     expect(inputs).toHaveLength(6)
     expect(inputs[0]?.getAttribute('aria-label')).toBe('Digit 1 of 6')
@@ -17,7 +17,7 @@ describe('OtpInput', () => {
   })
 
   it('displays the provided digits across the boxes', () => {
-    render(<OtpInput value="582" onChange={vi.fn()} />)
+    render(<OtpInput value="582" onChange={vi.fn<(...args: unknown[]) => unknown>()} />)
     const inputs = screen.getAllByRole('textbox') as HTMLInputElement[]
     expect(inputs[0]?.value).toBe('5')
     expect(inputs[1]?.value).toBe('8')
@@ -26,7 +26,7 @@ describe('OtpInput', () => {
   })
 
   it('calls onChange with new digit when user types', () => {
-    const onChange = vi.fn()
+    const onChange = vi.fn<(...args: unknown[]) => unknown>()
     render(<OtpInput value="" onChange={onChange} />)
     const inputs = screen.getAllByRole('textbox') as HTMLInputElement[]
     const firstInput = inputs[0]
@@ -38,8 +38,8 @@ describe('OtpInput', () => {
   })
 
   it('handles paste of full 6-digit code and calls onComplete', () => {
-    const onChange = vi.fn()
-    const onComplete = vi.fn()
+    const onChange = vi.fn<(...args: unknown[]) => unknown>()
+    const onComplete = vi.fn<(...args: unknown[]) => unknown>()
     render(<OtpInput value="" onChange={onChange} onComplete={onComplete} />)
     const inputs = screen.getAllByRole('textbox') as HTMLInputElement[]
     const firstInput = inputs[0]

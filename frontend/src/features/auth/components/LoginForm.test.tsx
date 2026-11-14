@@ -203,16 +203,18 @@ describe('LoginForm integration', () => {
     window.google = {
       accounts: {
         id: {
-          initialize: vi.fn((config) => {
-            googleCallback = config.callback
-          }),
-          renderButton: vi.fn(),
-          prompt: vi.fn(() => {
+          initialize: vi.fn<(config: { callback: (res: { credential?: string }) => void }) => void>(
+            (config) => {
+              googleCallback = config.callback
+            },
+          ),
+          renderButton: vi.fn<(...args: unknown[]) => unknown>(),
+          prompt: vi.fn<() => void>(() => {
             if (googleCallback) {
               googleCallback({ credential: 'valid-login-google-token' })
             }
           }),
-          cancel: vi.fn(),
+          cancel: vi.fn<(...args: unknown[]) => unknown>(),
         },
       },
     }
@@ -238,16 +240,18 @@ describe('LoginForm integration', () => {
     window.google = {
       accounts: {
         id: {
-          initialize: vi.fn((config) => {
-            googleCallback = config.callback
-          }),
-          renderButton: vi.fn(),
-          prompt: vi.fn(() => {
+          initialize: vi.fn<(config: { callback: (res: { credential?: string }) => void }) => void>(
+            (config) => {
+              googleCallback = config.callback
+            },
+          ),
+          renderButton: vi.fn<(...args: unknown[]) => unknown>(),
+          prompt: vi.fn<() => void>(() => {
             if (googleCallback) {
               googleCallback({ credential: 'invalid-google-token' })
             }
           }),
-          cancel: vi.fn(),
+          cancel: vi.fn<(...args: unknown[]) => unknown>(),
         },
       },
     }
@@ -274,16 +278,18 @@ describe('LoginForm integration', () => {
     window.google = {
       accounts: {
         id: {
-          initialize: vi.fn((config) => {
-            googleCallback = config.callback
-          }),
-          renderButton: vi.fn(),
-          prompt: vi.fn(() => {
+          initialize: vi.fn<(config: { callback: (res: { credential?: string }) => void }) => void>(
+            (config) => {
+              googleCallback = config.callback
+            },
+          ),
+          renderButton: vi.fn<(...args: unknown[]) => unknown>(),
+          prompt: vi.fn<() => void>(() => {
             if (googleCallback) {
               googleCallback({ credential: 'token-disabled-user' })
             }
           }),
-          cancel: vi.fn(),
+          cancel: vi.fn<(...args: unknown[]) => unknown>(),
         },
       },
     }

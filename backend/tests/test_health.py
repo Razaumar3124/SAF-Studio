@@ -127,4 +127,3 @@ async def test_health_ready_enriched_components(client: AsyncClient, mock_mongo_
     assert "whatsapp" in data
     assert "groq_ai" in data
     assert "google_oauth" in data
-

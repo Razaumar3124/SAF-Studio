@@ -206,7 +206,7 @@ describe('Planner layout (audit regressions)', () => {
     const mockWindow = {
       closed: false,
       location: { href: '' },
-      close: vi.fn(),
+      close: vi.fn<(...args: unknown[]) => unknown>(),
     }
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(mockWindow as unknown as Window)
 

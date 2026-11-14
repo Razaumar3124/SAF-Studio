@@ -1,0 +1,3 @@
+# Single-page app: serve index.html for every route so deep links and reloads (/login,
+# /register, /forgot-password, /memory-wall) resolve on Cloudflare Pages.
+/*    /index.html   200

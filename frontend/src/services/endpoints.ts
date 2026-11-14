@@ -38,9 +38,6 @@ export const endpoints = {
     regenerateLayout: '/geometry/regenerate', // POST · optional auth
     redesignLayout: '/geometry/redesign', // POST · optional auth
   },
-  pricing: {
-    calculate: '/pricing/calculate', // POST · optional auth
-  },
   designs: {
     list: '/designs', // GET · bearer
     create: '/designs', // POST · bearer
@@ -50,8 +47,6 @@ export const endpoints = {
     versions: (designId: EntityId) => `/designs/${id(designId)}/versions`, // POST · bearer
   },
   quotes: {
-    list: '/quotes', // GET  · bearer
-    create: '/quotes', // POST · bearer
     prepare: '/quotes/prepare', // POST · bearer · multipart `file` + `design_data`
     detail: (quoteId: EntityId) => `/quotes/${id(quoteId)}`, // GET · bearer
     share: (token: string) => `/quotes/share/${encodeURIComponent(token)}`, // GET · public

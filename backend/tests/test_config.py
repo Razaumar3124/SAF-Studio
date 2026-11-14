@@ -82,4 +82,3 @@ def test_mongodb_timeout_default_is_10000():
     """Verify cloud default connection timeout is 10,000ms."""
     settings = Settings()
     assert settings.MONGODB_TIMEOUT_MS == 10000
-

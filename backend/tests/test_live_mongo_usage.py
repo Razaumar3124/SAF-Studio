@@ -73,11 +73,23 @@ def _photo(user_id: str, content_hash: str | None, stored: int | None, size: int
 
     now = datetime.now(UTC)
     return PhotoInDB(
-        id=str(ObjectId()), user_id=user_id, original_filename="p.jpg", storage_key="a",
-        preview_key="b", thumbnail_key="c", bucket="b", mime_type="image/jpeg",
-        file_size_bytes=size, width_px=800, height_px=600, aspect_ratio=1.33,
-        suggested_orientation="landscape", content_hash=content_hash, stored_bytes=stored,
-        created_at=now, updated_at=now,
+        id=str(ObjectId()),
+        user_id=user_id,
+        original_filename="p.jpg",
+        storage_key="a",
+        preview_key="b",
+        thumbnail_key="c",
+        bucket="b",
+        mime_type="image/jpeg",
+        file_size_bytes=size,
+        width_px=800,
+        height_px=600,
+        aspect_ratio=1.33,
+        suggested_orientation="landscape",
+        content_hash=content_hash,
+        stored_bytes=stored,
+        created_at=now,
+        updated_at=now,
     )
 
 

@@ -10,7 +10,7 @@ vi.mock('@/services/apiClient', async () => {
   return {
     ...actual,
     api: {
-      post: vi.fn(),
+      post: vi.fn<(...args: unknown[]) => unknown>(),
     },
   }
 })
@@ -21,8 +21,8 @@ describe('ForgotPasswordPage', () => {
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: false,
       media: query,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
+      addEventListener: vi.fn<(...args: unknown[]) => unknown>(),
+      removeEventListener: vi.fn<(...args: unknown[]) => unknown>(),
     }))
   })
 
@@ -35,7 +35,7 @@ describe('ForgotPasswordPage', () => {
     render(
       <MemoryRouter>
         <ForgotPasswordPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     )
 
     expect(screen.getByRole('heading', { name: /forgot password\?/i })).toBeTruthy()
@@ -52,7 +52,7 @@ describe('ForgotPasswordPage', () => {
     render(
       <MemoryRouter>
         <ForgotPasswordPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     )
 
     const emailInput = screen.getByLabelText(/email address/i)
@@ -82,7 +82,7 @@ describe('ForgotPasswordPage', () => {
     render(
       <MemoryRouter>
         <ForgotPasswordPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     )
 
     // Step 1: Submit email

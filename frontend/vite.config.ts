@@ -5,26 +5,15 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import { imagetools } from 'vite-imagetools'
 import { assetsInlineLimit } from './src/config/build.ts'
+import { buildContentSecurityPolicy } from './src/config/csp.ts'
+import { resolveBuildApiBaseUrl } from './src/config/deploy.ts'
 
 /**
  * Production Content-Security-Policy, injected as a <meta> tag at build time only (the dev server
- * needs inline scripts for HMR). Defence in depth for the JS-readable auth tokens (API_ALIGNMENT Q3).
- * `frame-ancestors` can't be set via <meta>, so hosting must send it as a header (docs/SECURITY.md).
+ * needs inline scripts for HMR). The policy itself lives in src/config/csp.ts (unit-tested).
  */
 function contentSecurityPolicy(apiBaseUrl: string): Plugin {
-  const apiOrigin = /^https?:\/\//i.test(apiBaseUrl) ? new URL(apiBaseUrl).origin : ''
-  const csp = [
-    "default-src 'self'",
-    "script-src 'self'",
-    // style-src needs 'unsafe-inline' for React `style` attributes (e.g. hero object-position).
-    "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: ${apiOrigin}`.trim(),
-    "font-src 'self'",
-    `connect-src 'self' ${apiOrigin}`.trim(),
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-  ].join('; ')
+  const csp = buildContentSecurityPolicy(apiBaseUrl)
 
   return {
     name: 'saf:csp',
@@ -45,6 +34,8 @@ export default defineConfig(({ mode }) => {
   // server-side (only VITE_* vars that client code references reach the bundle).
   const env = loadEnv(mode, process.cwd(), '')
   const apiTarget = env.API_PROXY_TARGET || 'http://localhost:8000'
+  // Fails the build on Cloudflare Pages if the API URL is relative (see src/config/deploy.ts).
+  const apiBaseUrl = resolveBuildApiBaseUrl(env.VITE_API_BASE_URL, env.CF_PAGES === '1')
 
   return {
     plugins: [
@@ -54,7 +45,7 @@ export default defineConfig(({ mode }) => {
       // (e.g. `hero.webp?w=480;960&format=webp&as=srcset`). Source files are never modified.
       // Image imports live only in the src/assets/*.ts manifests (docs/ASSETS.md).
       imagetools(),
-      contentSecurityPolicy(env.VITE_API_BASE_URL ?? '/api/v1'),
+      contentSecurityPolicy(apiBaseUrl),
     ],
     resolve: {
       alias: {

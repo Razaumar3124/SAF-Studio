@@ -129,7 +129,9 @@ describe('designApi service', () => {
 
   it('updateDesign patches design', async () => {
     const req: UpdateDesignRequest = { title: 'Renamed Wall' }
-    const patchSpy = vi.spyOn(api, 'patch').mockResolvedValue({ id: 'design_1', title: 'Renamed Wall' } as any)
+    const patchSpy = vi
+      .spyOn(api, 'patch')
+      .mockResolvedValue({ id: 'design_1', title: 'Renamed Wall' } as never)
 
     await updateDesign('design_1', req)
 
@@ -151,10 +153,12 @@ describe('designApi service', () => {
       layout_metadata: { gapIn: 3 },
     }
 
-    const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ version_id: 'v2', version_number: 2 } as any)
+    const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ version_id: 'v2', version_number: 2 } as never)
 
     await createDesignVersion('design_1', versionReq)
 
-    expect(postSpy).toHaveBeenCalledWith(endpoints.designs.versions('design_1'), versionReq, { signal: undefined })
+    expect(postSpy).toHaveBeenCalledWith(endpoints.designs.versions('design_1'), versionReq, {
+      signal: undefined,
+    })
   })
 })

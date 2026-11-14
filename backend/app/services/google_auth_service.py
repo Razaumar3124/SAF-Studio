@@ -8,6 +8,8 @@ from google.oauth2 import id_token as google_id_token
 from app.core.config import get_settings
 from app.core.exceptions import (
     AccountDisabledException,
+    GoogleLinkRequiresVerificationException,
+    GoogleSignInUnavailableException,
     InvalidGoogleTokenException,
 )
 from app.models.user import UserInDB
@@ -34,16 +36,19 @@ class GoogleAuthService:
     ) -> AuthResponse:
         """Verify Google ID token and sign in / register user."""
         settings = get_settings()
+        client_id = settings.GOOGLE_CLIENT_ID.strip()
+        if not client_id:
+            # Never skip the audience check: without it any Google token from any app is accepted.
+            logger.error("Google sign-in attempted but GOOGLE_CLIENT_ID is not configured")
+            raise GoogleSignInUnavailableException()
 
         try:
-            # Use Google's official id_token verification
+            # Verifies signature, issuer, expiry and that the token was issued for OUR client id.
             request = google_requests.Request()
-            audience = settings.GOOGLE_CLIENT_ID or None
-
             id_info = google_id_token.verify_oauth2_token(
                 id_token_str,
                 request,
-                audience=audience,
+                audience=client_id,
             )
         except Exception as exc:
             logger.warning("Google ID token verification failed: %s", exc)
@@ -76,6 +81,12 @@ class GoogleAuthService:
                     raise InvalidGoogleTokenException(
                         "This account is already linked to a different Google account."
                     )
+                if not user.email_verified:
+                    # The account may have been created by someone else with this address.
+                    # Linking now would hand that creator a permanent sign-in path, so the owner
+                    # must first prove the address with an emailed code (password reset).
+                    logger.warning("Refused Google link to unverified account: user_id=%s", user.id)
+                    raise GoogleLinkRequiresVerificationException()
                 # Link Google ID to existing verified email account
                 await self.user_repo.link_google_id(user.id, google_id)
                 user.google_id = google_id
@@ -94,6 +105,7 @@ class GoogleAuthService:
                 is_active=True,
                 auth_provider="google",
                 google_id=google_id,
+                email_verified=True,
                 created_at=now,
                 updated_at=now,
             )

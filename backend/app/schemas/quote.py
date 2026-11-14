@@ -117,7 +117,6 @@ class QuoteDetailResponse(BaseModel):
     wall_size: str
     frame_count: int
     finish_summary: str
-    report_url: str
     preview_url: str
     customer_name: str
     customer_phone: str | None = None

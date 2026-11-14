@@ -41,12 +41,22 @@ async def add_photo(photos: FakePhotoRepository, user_id: str, deleted: bool = F
     now = datetime.now(UTC)
     await photos.create(
         PhotoInDB(
-            id=photo_id, user_id=user_id, original_filename="p.jpg",
-            storage_key=f"{base}/original.jpg", preview_key=f"{base}/preview.webp",
-            thumbnail_key=f"{base}/thumbnail.webp", bucket="b", mime_type="image/jpeg",
-            file_size_bytes=100, width_px=800, height_px=600, aspect_ratio=1.33,
-            suggested_orientation="landscape", is_deleted=deleted,
-            created_at=now, updated_at=now,
+            id=photo_id,
+            user_id=user_id,
+            original_filename="p.jpg",
+            storage_key=f"{base}/original.jpg",
+            preview_key=f"{base}/preview.webp",
+            thumbnail_key=f"{base}/thumbnail.webp",
+            bucket="b",
+            mime_type="image/jpeg",
+            file_size_bytes=100,
+            width_px=800,
+            height_px=600,
+            aspect_ratio=1.33,
+            suggested_orientation="landscape",
+            is_deleted=deleted,
+            created_at=now,
+            updated_at=now,
         )
     )
     return photo_id
@@ -165,8 +175,12 @@ async def test_soft_deleted_designs_purged_unless_referenced(env):
 
     async def design(deleted_days_ago: int | None) -> str:
         d = DesignInDB(
-            user_id=str(ObjectId()), title="Wall", wall=DesignWallInDB(),
-            is_deleted=deleted_days_ago is not None, created_at=now, updated_at=now,
+            user_id=str(ObjectId()),
+            title="Wall",
+            wall=DesignWallInDB(),
+            is_deleted=deleted_days_ago is not None,
+            created_at=now,
+            updated_at=now,
         )
         await designs.create_design(d)
         if deleted_days_ago is not None:

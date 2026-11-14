@@ -65,7 +65,6 @@ class PhotoService:
         filename: str,
         file_bytes: bytes,
         declared_content_type: str | None = None,
-        client_ip: str | None = None,
     ) -> PhotoUploadResponse:
         """Process and store a user uploaded photograph in Cloudflare R2 and MongoDB."""
         settings = get_settings()
@@ -177,6 +176,14 @@ class PhotoService:
             logger.error("MongoDB metadata persistence failed, rolling back R2 objects: %s", exc)
             await self._rollback(uploaded_keys, reservation)
             raise
+
+        # Authoritative library-limit check AFTER the insert: every committed photo was counted by a
+        # recount that ran after its own insert, so concurrent uploads cannot overshoot the limit
+        # (at worst a racing upload is rejected). The pre-check above only fails fast.
+        if await self.photo_repo.sum_active_storage_bytes(user_id) > limit_bytes:
+            await self.photo_repo.hard_delete(photo_id)
+            await self._rollback(uploaded_keys, reservation)
+            raise UserStorageQuotaExceededException(settings.USER_PHOTO_STORAGE_LIMIT_MB)
 
         await self.storage_quota.commit(reservation)
         return self._to_upload_response(photo_doc)

@@ -7,7 +7,7 @@ Verifies:
 4. Complete OTP verification lifecycle.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -115,7 +115,15 @@ async def test_resend_testing_mode_configurable_toggle():
         RESEND_API_KEY="re_test_dummy_key_not_real",
         RESEND_FROM_EMAIL="SAF Studio <security@safstudio.com>",
         RESEND_TEST_MODE=False,
-        CORS_ORIGINS=["https://safstudio.com"],
+        DEBUG=False,
+        CORS_ORIGINS=["https://app.safstudio.com"],
+        PUBLIC_APP_URL="https://api.safstudio.com",
+        MONGODB_URL="mongodb+srv://app:secret@cluster0.abcde.mongodb.net/saf_studio",
+        GOOGLE_CLIENT_ID="123-test.apps.googleusercontent.com",
+        TRUSTED_PROXY_HOPS=1,
+        R2_ACCOUNT_ID="acct",
+        R2_ACCESS_KEY_ID="key",
+        R2_SECRET_ACCESS_KEY="secret",
     )
     service = EmailService()
 
@@ -212,4 +220,3 @@ async def test_otp_lifecycle_generation_hash_and_verification():
 
     # 5. Wrong email rejected (email-bound)
     assert verify_otp_hash("other@gmail.com", otp, otp_hash) is False
-

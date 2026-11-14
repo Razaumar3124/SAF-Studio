@@ -137,9 +137,8 @@ describe('designMapper', () => {
     expect(state.frames).toHaveLength(1)
     expect(state.frames[0]?.sizeId).toBe('8x10')
     expect(state.frames[0]?.finishId).toBe('natural-oak')
-    expect(state.frames[0]?.photo?.kind).toBe('upload')
-    if (state.frames[0]?.photo?.kind === 'upload') {
-      expect(state.frames[0].photo.photoId).toBe('507f1f77bcf86cd799439099')
-    }
+    const photo = state.frames[0]?.photo
+    expect(photo?.kind).toBe('upload')
+    expect(photo?.kind === 'upload' ? photo.photoId : undefined).toBe('507f1f77bcf86cd799439099')
   })
 })

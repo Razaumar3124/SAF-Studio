@@ -13,6 +13,7 @@ logger = logging.getLogger("saf_studio.email")
 RESEND_EMAILS_URL = "https://api.resend.com/emails"
 # Resend allows 10 requests/second per team; wait at most this long before one retry.
 _MAX_RATE_LIMIT_WAIT_SECONDS = 2.0
+_MOCK_OUTBOX_LIMIT = 200
 
 
 class EmailDeliveryException(AppException):
@@ -187,6 +188,9 @@ class EmailService:
                 "expiry_minutes": expire_mins,
             }
             self.mock_sent_emails.append(record)
+            # Test/dev inspection only: keep a bounded window so it can never grow without limit.
+            if len(self.mock_sent_emails) > _MOCK_OUTBOX_LIMIT:
+                del self.mock_sent_emails[:-_MOCK_OUTBOX_LIMIT]
             if settings.is_development:
                 logger.debug(
                     "[DEV ONLY MOCK] OTP for %s: %s (expires in %d min)",

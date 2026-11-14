@@ -4,7 +4,8 @@ Usage (from backend/):
     uv run python -m scripts.storage_maintenance            # dry run: report only
     uv run python -m scripts.storage_maintenance --apply    # delete orphans, purge, reconcile
 
-The app also runs this automatically every STORAGE_MAINTENANCE_INTERVAL_HOURS.
+On Render, schedule the --apply form as a Cron Job (the in-process loop is off by default
+because free instances sleep). The app runs it in-process only if STORAGE_MAINTENANCE_INTERVAL_HOURS > 0.
 """
 
 import argparse

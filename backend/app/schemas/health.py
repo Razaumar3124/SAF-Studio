@@ -84,9 +84,7 @@ class WhatsAppHealthStatus(BaseModel):
     is_placeholder: bool = Field(
         default=False, description="Whether the number is an unconfigured placeholder"
     )
-    is_valid_format: bool = Field(
-        default=True, description="Whether the number is valid E.164"
-    )
+    is_valid_format: bool = Field(default=True, description="Whether the number is valid E.164")
     public_app_url: str = Field(..., description="Base URL used for shareable quote reports")
 
     model_config = ConfigDict(extra="forbid")
@@ -100,12 +98,8 @@ class GroqHealthStatus(BaseModel):
     )
     enabled: bool = Field(default=False, description="Whether Groq AI inference is active")
     model: str = Field(..., description="Configured LLM model identifier")
-    latency_ms: float | None = Field(
-        default=None, description="Round-trip inference latency in ms"
-    )
-    issue: str | None = Field(
-        default=None, description="Diagnostic issue message if degraded"
-    )
+    latency_ms: float | None = Field(default=None, description="Round-trip inference latency in ms")
+    issue: str | None = Field(default=None, description="Diagnostic issue message if degraded")
 
     model_config = ConfigDict(extra="forbid")
 
