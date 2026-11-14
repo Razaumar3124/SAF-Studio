@@ -1,19 +1,17 @@
 /// <reference types="node" />
-// Node types for this test only: Vitest doesn't process CSS by default, so `theme.css?raw` resolves
+// Node types for this test only: Vitest doesn't process CSS by default, so `colors.css?raw` resolves
 // to an empty string here. The file is read from disk instead (the test runs in Node).
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const themeCss = readFileSync(new URL('./theme.css', import.meta.url), 'utf8')
+const colorsCss = readFileSync(new URL('./colors.css', import.meta.url), 'utf8')
 
 /**
  * Guards the contrast table in docs/DESIGN_SYSTEM.md against token edits. Ratios are computed from
- * theme.css itself (WCAG 2.2 relative luminance). Text pairs need 4.5:1, UI boundaries 3:1.
- * Added in the audit of 2026-11-06, which found the Alert error text at 4.49:1 and the Switch off
- * state at 1.9:1.
+ * colors.css itself (WCAG 2.2 relative luminance). Text pairs need 4.5:1, UI boundaries 3:1.
  */
 const tokens = Object.fromEntries(
-  [...themeCss.matchAll(/--color-([\w-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1], m[2]]),
+  [...colorsCss.matchAll(/--color-([\w-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1], m[2]]),
 ) as Record<string, string>
 
 function luminance(hex: string) {

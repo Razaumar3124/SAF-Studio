@@ -55,10 +55,10 @@ function svgText(
     'font-size': String(size),
     'font-family': "'Segoe UI', Helvetica, Arial, sans-serif",
     'font-weight': '600',
-    fill: '#0b1d33', // SAF ink-900
+    fill: '#231709', // SAF ink-900 (Warm Espresso)
     'text-anchor': anchor,
     'paint-order': 'stroke',
-    stroke: 'rgba(255,252,247,0.9)',
+    stroke: 'rgba(250,247,242,0.9)',
     'stroke-width': String(size * 0.35),
   }
   Object.entries(attrs).forEach(([k, v]) => t.setAttribute(k, v))
@@ -69,7 +69,7 @@ function svgText(
 function svgLine(x1: number, y1: number, x2: number, y2: number, width: number, dash?: string) {
   const l = document.createElementNS(SVG_NS, 'line')
   Object.entries({ x1, y1, x2, y2 }).forEach(([k, v]) => l.setAttribute(k, String(v)))
-  l.setAttribute('stroke', '#0b1d33') // SAF ink-900
+  l.setAttribute('stroke', '#231709') // SAF ink-900 (Warm Espresso)
   l.setAttribute('stroke-opacity', '0.55')
   l.setAttribute('stroke-width', String(width))
   if (dash) l.setAttribute('stroke-dasharray', dash)
@@ -144,7 +144,7 @@ export async function renderWallPngBlob(
   }
 
   const caption = svgText(W / 2, H - H * 0.015, `${options.title} · ${APP_NAME}`, Math.max(W, H) / 80)
-  caption.setAttribute('fill', '#334155') // SAF ink-700
+  caption.setAttribute('fill', '#4a3525') // SAF ink-700 (Warm Saddle Bark)
   clone.append(caption)
 
   const height = Math.round((EXPORT_WIDTH_PX * H) / W)

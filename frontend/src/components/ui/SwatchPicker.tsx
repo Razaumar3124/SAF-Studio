@@ -77,7 +77,7 @@ export function SwatchPicker({
             />
             <span
               className={cn(
-                'grid size-8 cursor-pointer place-items-center rounded-full border border-black/10 shadow-field transition-transform',
+                'grid size-8 cursor-pointer place-items-center rounded-full border border-ink-900/15 shadow-field transition-transform',
                 'peer-checked:ring-2 peer-checked:ring-brand-600 peer-checked:ring-offset-2 peer-checked:ring-offset-surface hover:scale-105',
                 'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-brand-600',
                 'peer-disabled:cursor-not-allowed peer-disabled:opacity-40 peer-disabled:hover:scale-100',

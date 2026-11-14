@@ -73,7 +73,7 @@ function WallSvgImpl({
         <radialGradient id={id('light')} cx="0.12" cy="0.05" r="1">
           <stop offset="0" stopColor="#ffffff" stopOpacity="0.4" />
           <stop offset="0.6" stopColor="#ffffff" stopOpacity="0.06" />
-          <stop offset="1" stopColor="#0b1d33" stopOpacity="0.05" />
+          <stop offset="1" stopColor="#231709" stopOpacity="0.05" />
         </radialGradient>
         <linearGradient id={id('sheen')} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#fff" stopOpacity="0.28" />
@@ -82,10 +82,10 @@ function WallSvgImpl({
         </linearGradient>
         <linearGradient id={id('sofaShade')} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#ffffff" stopOpacity="0.25" />
-          <stop offset="1" stopColor="#0b1d33" stopOpacity="0.12" />
+          <stop offset="1" stopColor="#231709" stopOpacity="0.12" />
         </linearGradient>
         <filter id={id('shadow')} x="-20%" y="-20%" width="140%" height="150%">
-          <feDropShadow dx="0.35" dy="0.9" stdDeviation="0.9" floodColor="#0b1d33" floodOpacity="0.32" />
+          <feDropShadow dx="0.35" dy="0.9" stdDeviation="0.9" floodColor="#231709" floodOpacity="0.32" />
         </filter>
       </defs>
 
@@ -231,20 +231,20 @@ function FrameShape({
         </>
       ) : (
         <g>
-          <rect x={px} y={py} width={photoRect.w} height={photoRect.h} fill="#eef6f8" />
+          <rect x={px} y={py} width={photoRect.w} height={photoRect.h} fill="#f3ede4" />
           <rect
             x={px + 0.4}
             y={py + 0.4}
             width={Math.max(0, photoRect.w - 0.8)}
             height={Math.max(0, photoRect.h - 0.8)}
             fill="none"
-            stroke="#8592a4"
+            stroke="#9e8c7a"
             strokeWidth={0.12}
             strokeDasharray="0.6 0.45"
           />
           <path
             d={`M${px + photoRect.w / 2 - plus} ${py + photoRect.h / 2}h${plus * 2}M${px + photoRect.w / 2} ${py + photoRect.h / 2 - plus}v${plus * 2}`}
-            stroke="#8592a4"
+            stroke="#9e8c7a"
             strokeWidth={Math.max(0.15, plus * 0.18)}
             strokeLinecap="round"
           />
@@ -261,7 +261,7 @@ function FrameShape({
             height={h + 2.8}
             rx={0.6}
             fill="none"
-            stroke="#0b1d33"
+            stroke="#231709"
             strokeWidth={2}
             vectorEffect="non-scaling-stroke"
             strokeDasharray="4 3"
@@ -274,7 +274,7 @@ function FrameShape({
               height={h + 1.8}
               rx={0.5}
               fill="none"
-              stroke="#0f7c82"
+              stroke="#f2a428"
               strokeWidth={3}
               vectorEffect="non-scaling-stroke"
             />
@@ -320,7 +320,7 @@ function ReferenceSofa({
         cy={floorY - 0.4}
         rx={width * 0.52}
         ry={1.2}
-        fill="#0b1d33"
+        fill="#231709"
         fillOpacity="0.12"
       />
       {/* Legs */}

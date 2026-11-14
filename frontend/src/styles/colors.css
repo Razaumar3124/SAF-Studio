@@ -1,0 +1,91 @@
+/*
+ * SAF Studio (Sagar Arts & Frames) — Centralized Color Palette.
+ * Derived strictly from the brand logo (Brown #A06F37 | Gold #F2A428).
+ * Single centralized source of truth for all application colors.
+ */
+@theme {
+  /* ==========================================================================
+     1. Semantic Tokens (Functional, Intent-Driven CSS Variables)
+     ========================================================================== */
+  --color-primary: #8a5a2b;
+  --color-primary-hover: #70481f;
+  --color-primary-active: #583716;
+  --color-primary-light: #fbf5ee;
+
+  --color-accent: #f2a428;
+  --color-accent-hover: #dc8f15;
+  --color-accent-text: #8c5908;
+  --color-accent-light: #fef6e9;
+
+  --color-text-display: #231709;
+  --color-text-primary: #322214;
+  --color-text-body: #4a3525;
+  --color-text-muted: #6b533e;
+  --color-text-placeholder: #856f59;
+  --color-text-disabled: #c4b5a5;
+
+  --color-background: #faf7f2;
+  --color-surface: #ffffff;
+  --color-surface-panel: #f3ede4;
+  --color-surface-subtle: #e8dfcf;
+  --color-border-line: #e8dfd5;
+  --color-border-field: #9e8c7a;
+
+  /* ==========================================================================
+     2. Brand Primary Scale (Warm Artisan Saddle Wood)
+     ========================================================================== */
+  --color-brand-50: #fbf5ee;
+  --color-brand-100: #f5e9da;
+  --color-brand-200: #ead3b7;
+  --color-brand-300: #ddb88f;
+  --color-brand-400: #c99863;
+  --color-brand-500: #a06f37; /* EXACT LOGO MONOGRAM BROWN */
+  --color-brand-600: #8a5a2b; /* Primary Action CTA (5.87:1 on white) */
+  --color-brand-700: #70481f; /* Hover State & Link Text (8.31:1 on white) */
+  --color-brand-800: #583716; /* Pressed / Active State */
+  --color-brand-900: #422910;
+  --color-brand-950: #251608;
+
+  /* ==========================================================================
+     3. Gold Accent Scale (Radiant Gilded Amber Gold)
+     ========================================================================== */
+  --color-gold-100: #fef6e9;
+  --color-gold-200: #fde8c5;
+  --color-gold-300: #fbd697;
+  --color-gold-400: #f2a428; /* EXACT LOGO GILDED GOLD ACCENT */
+  --color-gold-500: #dc8f15; /* Gold Hover */
+  --color-gold-600: #8c5908; /* Gold Text (5.30:1 on white) */
+  --color-gold-700: #704505;
+
+  /* ==========================================================================
+     4. Ink / Typography Scale (Warm Dark Espresso, Zero Pure Black)
+     ========================================================================== */
+  --color-ink-900: #231709; /* Dark Roasted Espresso: Display Headings & Wordmark (17.5:1) */
+  --color-ink-800: #322214; /* Deep Walnut: Field Labels & Panel Titles (13.8:1) */
+  --color-ink-700: #4a3525; /* Warm Saddle Bark: Body Text (11.5:1) */
+  --color-ink-600: #6b533e; /* Warm Umber: Subtitles & Secondary Text (7.1:1) */
+  --color-ink-500: #856f59; /* Soft Sepia: Placeholders & Icons (4.76:1) */
+  --color-ink-400: #9e8c7a; /* Warm Stone Slate: Accessible Field Boundaries (3.24:1, WCAG 1.4.11) */
+  --color-ink-300: #c4b5a5; /* Pale Clay: Disabled Elements */
+
+  /* ==========================================================================
+     5. Warm Surfaces & Neutral Canvas (Studio Archival Linen & Alabaster)
+     ========================================================================== */
+  --color-mist-50: #faf7f2; /* Studio Archival Alabaster (Page Background) */
+  --color-mist-100: #f3ede4; /* Warm Linen (Planner Configuration Panels) */
+  --color-mist-200: #e8dfcf; /* Sandstone Tint (Subtle Hover, Step-Icon Discs) */
+  --color-mist-300: #d8cdba; /* Decorative Blocks / Subtle Borders */
+  --color-sage-200: #e2dbcd; /* Warm Biscuit/Linen Block behind Hero Art */
+  --color-line: #e8dfd5; /* Structural Dividers & Hairlines */
+
+  /* ==========================================================================
+     6. Semantic Status Colors (Success, Danger/Error, Warning, Info)
+     ========================================================================== */
+  --color-success-50: #f0f6f1;
+  --color-success-600: #286a34; /* Forest Olive (5.42:1 on white) */
+  --color-danger-50: #fdf2f2;
+  --color-danger-600: #b83535; /* Brick Carmine (5.34:1 on white) */
+  --color-danger-700: #942525; /* Crimson Alert (6.38:1 on danger-50) */
+  --color-info-50: #f7f2eb;
+  --color-info-700: #7a542d; /* Warm Umber (6.20:1 on info-50) */
+}

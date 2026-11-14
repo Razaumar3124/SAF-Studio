@@ -1,10 +1,11 @@
 /*
  * SAF Studio (Sagar Arts & Frames) — design tokens.
- * Values sampled pixel-by-pixel from /reference-designs (login, register, memory-wall-design).
+ * Colors are centralized in ./colors.css (derived from logo-mark.svg).
  * Every token here becomes a Tailwind utility (e.g. --color-brand-600 -> bg-brand-600).
- * See docs/DESIGN_SYSTEM.md before adding or changing tokens, including the
- * Moonlight → SAF token map used when porting components.
+ * See docs/DESIGN_SYSTEM.md before adding or changing tokens.
  */
+@import './colors.css';
+
 @theme {
   /* ---------- Typography ---------- */
   /* Self-hosted via @fontsource (src/main.tsx): Plus Jakarta Sans variable 200–800.
@@ -22,62 +23,15 @@
   /* Display headlines are set tight ("Welcome Back.", "Curate Your Perfect Wall."). */
   --tracking-display: -0.025em;
 
-  /* ---------- Brand teal (primary buttons, links, active states, toggles) ---------- */
-  --color-brand-50: #eff8f8;
-  --color-brand-100: #d7eeee; /* selected tints */
-  --color-brand-200: #b0dddc;
-  --color-brand-300: #7fc5c3;
-  --color-brand-400: #45a7a6; /* decorative only: eyebrow look in mockup, fails AA as text */
-  --color-brand-500: #1e8f90; /* decorative only: white text on it is 3.9:1 (fails AA) */
-  --color-brand-600: #0f7c82; /* primary — Sign In / Create Account / Request a Quote (white text 5.0:1) */
-  --color-brand-700: #0b656b; /* hover; eyebrow + link text */
-  --color-brand-800: #0c5257; /* pressed */
-  --color-brand-900: #0d4448;
-  --color-brand-950: #032a2d;
-
-  /* ---------- Gold accent (short rules above taglines, frame ornaments) ---------- */
-  --color-gold-100: #f6eedf;
-  --color-gold-200: #ead7b5;
-  --color-gold-300: #d9b985;
-  --color-gold-400: #c29a5f; /* decorative rules (non-text) */
-  --color-gold-500: #a87c3f;
-  --color-gold-600: #8a6230; /* gold TEXT only (5.4:1 on white) */
-
-  /* ---------- Navy ink ---------- */
-  --color-ink-900: #0b1d33; /* display headings */
-  --color-ink-800: #1c2a40; /* field labels, panel titles */
-  --color-ink-700: #334155; /* body text */
-  --color-ink-600: #5b6981; /* subtitles; safe on mist surfaces (5.5:1 white / 5.0:1 mist-100) */
-  --color-ink-500: #64748b; /* helper text, placeholders, icons — on WHITE only (4.75:1) */
-  /* Form-field boundary: 3.2:1 on white (WCAG 1.4.11). The mockup's #DBE1EA (1.3:1) is too faint. */
-  --color-ink-400: #8592a4;
-  --color-ink-300: #b4becc; /* disabled */
-
-  /* ---------- Cool neutral surfaces ---------- */
-  --color-surface: #ffffff; /* cards, inputs, header */
-  --color-mist-50: #f8fcfd; /* page background */
-  --color-mist-100: #eef6f8; /* planner panels */
-  --color-mist-200: #dcebef; /* hover / subtle fills, step-icon discs */
-  --color-mist-300: #c3dce1; /* decorative arcs */
-  --color-sage-200: #cfe3dd; /* mint colour blocks behind hero art */
-  --color-line: #e1e7ee; /* decorative borders + dividers (NOT field boundaries) */
-
-  /* ---------- Semantic ---------- */
-  --color-success-50: #e7f5ea;
-  --color-success-600: #1e7f34; /* "Frame #1 Selected" dot, fits-wall badge */
-  --color-danger-50: #fdecee;
-  --color-danger-600: #c73947; /* "Remove", field errors, error borders (5.1:1 on white) */
-  --color-danger-700: #a42c38; /* error text on danger-50 tints (Alert): 6.1:1 (danger-600 is 4.49) */
-
   /* ---------- Shape & depth ---------- */
   --radius-field: 0.5rem; /* inputs, buttons, tiles */
   --radius-card: 1rem; /* auth card, planner panels */
 
-  /* Cool, navy-tinted shadows: never neutral grey. */
-  --shadow-field: 0 1px 2px rgb(11 29 51 / 0.04);
-  --shadow-card: 0 1px 2px rgb(11 29 51 / 0.04), 0 8px 24px rgb(11 29 51 / 0.06);
-  --shadow-float: 0 2px 6px rgb(11 29 51 / 0.04), 0 24px 60px rgb(11 29 51 / 0.1); /* auth card */
-  --shadow-button: 0 4px 12px rgb(15 124 130 / 0.25);
+  /* Warm amber/espresso-tinted shadows: never cold grey or navy. */
+  --shadow-field: 0 1px 2px rgb(35 23 9 / 0.04);
+  --shadow-card: 0 1px 3px rgb(35 23 9 / 0.05), 0 8px 24px rgb(35 23 9 / 0.07);
+  --shadow-float: 0 2px 6px rgb(35 23 9 / 0.05), 0 24px 60px rgb(35 23 9 / 0.12); /* auth card */
+  --shadow-button: 0 4px 14px rgb(138 90 43 / 0.28);
 
   /* ---------- Motion ---------- */
   /* Delayed fade so fast lazy-route loads don't flash a spinner. */

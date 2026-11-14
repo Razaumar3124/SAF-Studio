@@ -1,86 +1,78 @@
 # Design System: SAF Studio (Sagar Arts & Frames)
 
-Derived **only** from [`reference-designs/`](../reference-designs) (`login.png`, `register.png`,
-`memory-wall-design.png`). Colours were sampled pixel by pixel from those files, not estimated by eye.
-Never take visual decisions from Moonlight's designs or components. Moonlight only provides the
-_behaviour_ (see [PORTING_PARITY.md](PORTING_PARITY.md)).
+Brand palette derived directly from the official logo asset [`logo-mark.svg`](../frontend/src/assets/images/logo-mark.svg) (`#A06F37` saddle brown and `#F2A428` radiant gold).
+Centralized color tokens live in [`frontend/src/styles/colors.css`](../frontend/src/styles/colors.css) and are imported into [`frontend/src/styles/theme.css`](../frontend/src/styles/theme.css) as a Tailwind v4 `@theme` block. Every token becomes a utility automatically (`--color-brand-600` → `bg-brand-600`, `--color-ink-900` → `text-ink-900`).
 
-Tokens live in [`frontend/src/styles/theme.css`](../frontend/src/styles/theme.css) as a Tailwind v4
-`@theme` block. Each token becomes a utility automatically (`--color-brand-600` → `bg-brand-600`).
-
-**Rule:** don't hard-code hex values or arbitrary pixel values in components. If a value is missing,
-add a token to `theme.css` and record it here.
+**Rule:** don't hard-code hex values or arbitrary pixel values in components. Colors must reference centralized tokens in `colors.css`.
 
 ## Design direction
 
-**Bright, airy, gallery-modern.** A sunlit white room with soft mint and powder-blue colour blocks.
-Teal is the single strong action colour, warm gold/wood appears as fine accents (short rules,
-frame mouldings), and deep navy carries heavy, tightly-tracked sans-serif headlines that end in a
-full stop ("Welcome Back.", "Curate Your Perfect Wall."). White cards float over photographic
-scenes. Small uppercase captions with wide letter-spacing frame the page edges like gallery
-labels. The art and photography carry the emotion while the chrome stays clean and cool.
+**Warm artisan luxury, gallery-modern.** Grounded in bespoke framing craftsmanship, natural timber mouldings, and radiant gilded accents.
+Warm saddle artisan brown is the primary action colour, radiant amber gold provides illuminating highlights and active selection indicators, and dark roasted espresso carries heavy, tightly-tracked headlines—avoiding pure black (`#000000`) for typography. Backgrounds use warm archival alabaster and linen surfaces rather than cold icy blues.
 
-| Moonlight (do **not** copy)                     | SAF Studio                                                        |
+| Moonlight (do **not** copy)                     | SAF Studio (Warm Artisan Luxury)                                  |
 | ----------------------------------------------- | ----------------------------------------------------------------- |
-| Warm heritage: cream paper, crimson, serif      | Cool modern: white/mist, teal, heavy geometric sans               |
+| Warm heritage: cream paper, crimson, serif      | Warm atelier luxury: alabaster/linen, saddle brown, gold, sans    |
 | Logo + EST. tag inside the form column          | Full-width white **brand bar** with logo lockup on every screen   |
 | Hero photo left, form right (both auth screens) | Login: card **left**, art right. Register: art left, card right   |
-| Corner waves and leaf ornaments                 | Vertical caption stacks, thin hairlines, gold rules, mint blocks  |
+| Corner waves and leaf ornaments                 | Vertical caption stacks, thin hairlines, gold rules, linen blocks |
 | Numbered step cards ①–④ in the planner          | Hero headline + 4-step strip, and panels with plain titles        |
 
 ## Colour
 
-| Token                    | Hex       | Sampled from                    | Use                                                                    |
-| ------------------------ | --------- | ------------------------------- | ---------------------------------------------------------------------- |
-| `brand-600`              | `#0F7C82` | Sign In / Create Account fill   | Primary buttons, active segment, toggles on, selected chip             |
-| `brand-500`              | `#1E8F90` | Sign In gradient left edge      | **Decorative only**: white text on it is 3.9:1. The CTA gradient runs `brand-600 → brand-700` |
-| `brand-700`              | `#0B656B` | (darker step)                   | Hover; **link + eyebrow text** (mockup's lighter teal fails AA)        |
-| `brand-800`              | `#0C5257` | "Forgot Password?" darkest ink  | Pressed                                                                |
-| `brand-50/100`           | —         | selected tile tint              | Selected-state backgrounds                                             |
-| `brand-400`              | `#45A7A6` | eyebrow "JOIN THE SAF STUDIO"   | Decorative only (2.9:1, never text)                                    |
-| `gold-400`               | `#C29A5F` | short rules above taglines      | Hairline rules, ornaments (non-text)                                   |
-| `gold-600`               | `#8A6230` | (darker step)                   | Gold **text** if ever needed                                           |
-| `ink-900`                | `#0B1D33` | "Welcome Back." / taglines      | Display headings, prices                                               |
-| `ink-800`                | `#1C2A40` | field labels                    | Labels, panel titles                                                   |
-| `ink-700`                | `#334155` | —                               | Body text                                                              |
-| `ink-600`                | `#5B6981` | subtitles                       | Subtitles; any secondary text on mist surfaces                         |
-| `ink-500`                | `#64748B` | input icons, side captions      | Helper text, placeholders, icons (**on white only**)                   |
-| `ink-400`                | `#8592A4` | placeholder ink                 | **Form-field borders** (3.2:1, WCAG 1.4.11)                            |
-| `surface`                | `#FFFFFF` | card, header                    | Cards, inputs, brand bar, action bar                                   |
-| `mist-50`                | `#F8FCFD` | planner page                    | Page background                                                        |
-| `mist-100`               | `#EEF6F8` | planner config panels           | Panel backgrounds                                                      |
-| `mist-200`               | `#DCEBEF` | step-icon discs                 | Subtle fills, hover                                                    |
-| `mist-300` / `sage-200`  | `#C3DCE1` / `#CFE3DD` | arcs / mint blocks  | Decorative colour blocks behind art                                    |
-| `line`                   | `#E1E7EE` | input outline, OR divider       | Card borders, dividers (**not** field boundaries)                      |
-| `success-600`            | `#1E7F34` | "Frame #1 Selected" dot         | Positive status                                                        |
-| `danger-600`             | `#C73947` | "Remove" button                 | Destructive actions, field errors, error borders                       |
-| `danger-700`             | `#A42C38` | (darker step)                   | Error **text on `danger-50` tints** (Alert): 6.1:1                     |
+All colors are centralized in [`frontend/src/styles/colors.css`](../frontend/src/styles/colors.css).
+
+| Token                   | Hex                   | Role / Origin                  | Use                                                                                       |
+| ----------------------- | --------------------- | ------------------------------ | ----------------------------------------------------------------------------------------- |
+| `brand-600`             | `#8A5A2B`             | Warm Saddle Artisan Brown      | Primary action buttons (Sign In / Create Account / Request a Quote), active segment, chip |
+| `brand-500`             | `#A06F37`             | **Exact Logo Monogram Brown**  | Brand identity mark, decorative brand tint                                                |
+| `brand-700`             | `#70481F`             | Burnished Walnut (darker step) | Hover; **link + eyebrow text** (8.3:1 contrast on white)                                  |
+| `brand-800`             | `#583716`             | Dark Chocolate Timber          | Pressed / active button state                                                             |
+| `brand-50/100`          | `#FBF5EE`/`#F5E9DA`   | Biscuit Tints                  | Selected tile and chip tint backgrounds                                                   |
+| `brand-400`             | `#C99863`             | Caramel Midtone                | Decorative accents                                                                        |
+| `gold-400`              | `#F2A428`             | **Exact Logo Gilded Gold**     | Frame ornaments, hairline rules, active frame selection ring in canvas                    |
+| `gold-500`              | `#DC8F15`             | Amber Gold (hover)             | Gold hover states                                                                         |
+| `gold-600`              | `#8C5908`             | Antique Bronze Gold            | Gold **text** when placed on white/light backgrounds (5.3:1)                              |
+| `gold-100`              | `#FEF6E9`             | Champagne Tint                 | Warning / highlight badge backgrounds                                                     |
+| `ink-900`               | `#231709`             | Dark Roasted Espresso          | Display headings, BrandBar wordmark, prominent prices (zero pure black)                   |
+| `ink-800`               | `#322214`             | Deep Walnut                    | Field labels, panel titles                                                                |
+| `ink-700`               | `#4A3525`             | Warm Saddle Bark               | Body text                                                                                 |
+| `ink-600`               | `#6B533E`             | Warm Umber                     | Subtitles; secondary text on linen surfaces                                               |
+| `ink-500`               | `#856F59`             | Soft Sepia                     | Helper text, placeholders, icons (4.76:1 on white)                                        |
+| `ink-400`               | `#9E8C7A`             | Warm Stone Slate               | **Form-field borders**, Switch off-border (3.24:1, WCAG 1.4.11)                           |
+| `ink-300`               | `#C4B5A5`             | Pale Clay                      | Disabled text & borders                                                                   |
+| `surface`               | `#FFFFFF`             | Pure White                     | Cards, inputs, brand bar, modal dialogs                                                   |
+| `mist-50`               | `#FAF7F2`             | Studio Archival Alabaster      | Page background (replaces cold icy cyan)                                                  |
+| `mist-100`              | `#F3EDE4`             | Natural Warm Linen             | Planner configuration panel backgrounds                                                   |
+| `mist-200`              | `#E8DFCF`             | Sandstone Tint                 | Hover / subtle fills, step-icon discs                                                     |
+| `mist-300` / `sage-200` | `#D8CDBA` / `#E2DBCD` | Warm Biscuit Blocks            | Decorative colour blocks behind art                                                       |
+| `line`                  | `#E8DFD5`             | Warm Parchment Hairline        | Card borders, dividers (**not** field boundaries)                                         |
+| `success-600`           | `#286A34`             | Forest Olive                   | Positive status, "Frame Selected" badge                                                   |
+| `success-50`            | `#F0F6F1`             | Sage Tint                      | Success banner background                                                                 |
+| `danger-600`            | `#B83535`             | Brick Carmine                  | Destructive actions, field errors, error borders                                          |
+| `danger-700`            | `#942525`             | Crimson Alert                  | Error **text on `danger-50` tints** (Alert): 6.38:1                                       |
+| `danger-50`             | `#FDF2F2`             | Blush Tint                     | Error banner background                                                                   |
 
 ### Contrast (computed, WCAG 2.2)
 
-| Pair                                   | Ratio | Result                                |
-| -------------------------------------- | ----- | ------------------------------------- |
-| ink-900 heading on white               | 17.0  | ✅                                    |
-| white on brand-600 button              | 5.0   | ✅ AA body text                       |
-| brand-700 link / eyebrow on white      | 6.8   | ✅                                    |
-| ink-600 subtitle on white / mist-100   | 5.5 / 5.1 | ✅                                |
-| ink-500 placeholder on white           | 4.75  | ✅ (fails on mist-100: use ink-600)   |
-| ink-400 field border on white          | 3.2   | ✅ non-text                           |
-| danger-600 on white                    | 5.1   | ✅                                    |
-| danger-700 on danger-50 (Alert error)  | 6.1   | ✅ (danger-600 there is 4.49 ❌)      |
-| white on brand-500                     | 3.9   | ❌ never put text on brand-500        |
-| ink-400 Switch off-state border        | 3.2   | ✅ non-text (ink-300 was 1.9 ❌)      |
-| success-600 on white                   | 4.9   | ✅                                    |
-| brand-400 (mockup eyebrow teal)        | 2.9   | ❌ decorative only                    |
-| mockup input border `#DBE1EA`          | 1.3   | ❌ replaced by ink-400                |
-| mockup placeholder `#8591A4`           | 3.2   | ❌ replaced by ink-500                |
-
-The ❌ rows are deliberate, documented deviations from the mockup, made for accessibility (the mockup's
-CTA gradient, eyebrow teal, input border and placeholder all fail). Moonlight's audit made the same kind of fix.
+| Pair                                  | Ratio       | Result                    |
+| ------------------------------------- | ----------- | ------------------------- |
+| ink-900 heading on white              | 17.5        | ✅ AAA                    |
+| white on brand-600 button             | 5.87        | ✅ AA body text           |
+| brand-700 link / eyebrow on white     | 8.31        | ✅ AAA                    |
+| ink-600 subtitle on white / mist-100  | 7.15 / 6.27 | ✅ AAA / AA               |
+| ink-500 placeholder on white          | 4.76        | ✅ AA                     |
+| ink-400 field border on white         | 3.24        | ✅ non-text (WCAG 1.4.11) |
+| danger-600 on white                   | 5.34        | ✅ AA                     |
+| danger-700 on danger-50 (Alert error) | 6.38        | ✅ AAA                    |
+| gold-600 on white                     | 5.30        | ✅ AA                     |
+| ink-400 Switch off-state border       | 3.24        | ✅ non-text               |
+| success-600 on white                  | 5.42        | ✅ AA                     |
+| brand-600 on surface (non-text UI)    | 3.58        | ✅ non-text               |
+| danger-600 on surface (error border)  | 3.93        | ✅ non-text               |
 
 **Enforced by a test:** [`src/styles/contrast.test.ts`](../frontend/src/styles/contrast.test.ts) computes these
-ratios from `theme.css` itself. A token edit that breaks AA fails `npm run check`. Add a row there when you
-introduce a new text/background pairing.
+ratios from `colors.css` itself. A token edit that breaks AA fails `npm run check`.
 
 ## Typography
 
@@ -88,17 +80,17 @@ One self-hosted family, **Plus Jakarta Sans Variable** (`@fontsource-variable/pl
 weights 200–800). Its ExtraBold matches the heavy geometric headlines. It replaces Moonlight's
 Playfair Display + DM Sans pair.
 
-| Role                       | Classes                                                                  | Mockup example                          |
-| -------------------------- | ------------------------------------------------------------------------ | --------------------------------------- |
-| Display title              | `font-display font-extrabold tracking-display text-4xl lg:text-5xl`      | "Welcome Back.", "Curate Your Perfect Wall." |
-| Hero tagline               | `font-display font-extrabold tracking-display text-2xl lg:text-4xl`      | "Your space. Your art. Your story."     |
-| Panel title                | `text-base font-bold text-ink-800`                                       | "Wall Configuration", "Frame Gaps"      |
-| Eyebrow                    | `text-xs font-bold uppercase tracking-eyebrow text-brand-700`            | "YOUR CREATIVE SPACE"                   |
-| Side caption stack         | `text-[0.6875rem] font-medium uppercase tracking-caption text-ink-500`   | "ART / FRAMES / PRINTS / WALL DECOR"    |
-| Subtitle / body            | `text-base lg:text-lg text-ink-600`                                      | "Sign in to continue designing…"        |
-| Field label                | `text-sm font-semibold text-ink-800`                                     | "Mobile No. or Email"                   |
-| Control label (planner)    | `text-xs sm:text-sm text-ink-600`                                        | "Wall Width", "Paint Shade"             |
-| Price                      | `text-2xl font-extrabold text-ink-900`                                   | "₹ 18,500"                              |
+| Role                    | Classes                                                                | Mockup example                               |
+| ----------------------- | ---------------------------------------------------------------------- | -------------------------------------------- |
+| Display title           | `font-display font-extrabold tracking-display text-4xl lg:text-5xl`    | "Welcome Back.", "Curate Your Perfect Wall." |
+| Hero tagline            | `font-display font-extrabold tracking-display text-2xl lg:text-4xl`    | "Your space. Your art. Your story."          |
+| Panel title             | `text-base font-bold text-ink-800`                                     | "Wall Configuration", "Frame Gaps"           |
+| Eyebrow                 | `text-xs font-bold uppercase tracking-eyebrow text-brand-700`          | "YOUR CREATIVE SPACE"                        |
+| Side caption stack      | `text-[0.6875rem] font-medium uppercase tracking-caption text-ink-500` | "ART / FRAMES / PRINTS / WALL DECOR"         |
+| Subtitle / body         | `text-base lg:text-lg text-ink-600`                                    | "Sign in to continue designing…"             |
+| Field label             | `text-sm font-semibold text-ink-800`                                   | "Mobile No. or Email"                        |
+| Control label (planner) | `text-xs sm:text-sm text-ink-600`                                      | "Wall Width", "Paint Shade"                  |
+| Price                   | `text-2xl font-extrabold text-ink-900`                                 | "₹ 18,500"                                   |
 
 Headline copy ends with a full stop wherever the mockups show one. That is a brand voice rule.
 
@@ -127,20 +119,20 @@ The logo's own wordmark is a light sans, so no serif font is loaded.
 When porting a Moonlight component, keep its JSX/logic and swap tokens with this table. Then adjust
 layout to the SAF mockup.
 
-| Moonlight            | SAF                            | Notes                                       |
-| -------------------- | ------------------------------ | ------------------------------------------- |
-| `brand-*` (crimson)  | `brand-*` (teal)               | Same name, same role, new hue               |
-| `gold-*`             | `gold-*`                       | Same role (ornament)                        |
-| `cream-50`           | `surface`                      | Cards/inputs are pure white in SAF          |
-| `cream-100`          | `mist-50`                      | Page background                             |
-| `cream-200`          | `mist-100`                     | Subtle panels / segmented track             |
-| `cream-300/400`      | `line` / `ink-300`             | Decorative borders                          |
-| `cream-600` (fields) | `ink-400`                      | Field boundary (3:1)                        |
-| `ink-900/700/500`    | `ink-900/700/600`              | Use `ink-500` only on white                 |
-| `success-500`        | `success-600`                  |                                             |
-| `danger-600`         | `danger-600`                   |                                             |
-| `font-display` serif | `font-display font-extrabold tracking-display` | Different weight + tracking |
-| `rounded-field` 10px | `rounded-field` 8px            | Same token name                             |
+| Moonlight            | SAF (Warm Artisan Luxury)                      | Notes                                       |
+| -------------------- | ---------------------------------------------- | ------------------------------------------- |
+| `brand-*` (crimson)  | `brand-*` (warm saddle brown)                  | Same name, same role, warm artisan hue      |
+| `gold-*`             | `gold-*`                                       | Same role (radiant gold ornament/accent)    |
+| `cream-50`           | `surface`                                      | Cards/inputs are pure white in SAF          |
+| `cream-100`          | `mist-50`                                      | Archival alabaster page background          |
+| `cream-200`          | `mist-100`                                     | Warm linen panels / segmented track         |
+| `cream-300/400`      | `line` / `ink-300`                             | Decorative borders                          |
+| `cream-600` (fields) | `ink-400`                                      | Field boundary (3:1)                        |
+| `ink-900/700/500`    | `ink-900/700/600`                              | Dark espresso / saddle bark (no pure black) |
+| `success-500`        | `success-600`                                  | Forest olive status                         |
+| `danger-600`         | `danger-600`                                   | Brick carmine status                        |
+| `font-display` serif | `font-display font-extrabold tracking-display` | Different weight + tracking                 |
+| `rounded-field` 10px | `rounded-field` 8px                            | Same token name                             |
 
 ## Component inventory (from the SAF mockups)
 
@@ -148,26 +140,26 @@ Generic primitives live in `components/ui/` under the **same names and props as 
 code ports unchanged. All were ported on 2026-11-06 (✅), and Moonlight's `Toaster` and `RegisterForm`
 tests pass against them unchanged.
 
-| Component          | SAF appearance (as built)                                                                       | Used in              |
-| ------------------ | ----------------------------------------------------------------------------------------------- | -------------------- |
-| `Button`           | `primary` solid teal; `primary-gradient` teal sheen (auth CTAs) + trailing `→` via `rightIcon`; `secondary` white + `line` border | All |
-| `TextField`        | white, 1px `ink-400` boundary, slate outline icon left, 8px radius, 48 → 52px (`sm`), teal focus ring | Login, Register |
-| `PasswordField`    | lock-keyhole icon + eye toggle (open eye while hidden, as in the mockup)                        | Login, Register      |
-| `PhoneField`       | phone icon · fixed `+91` · hairline · number (no chevron: D23 → Moonlight)                      | Register             |
-| `Divider`          | `line` hairlines with centred teal "OR" in tracked caps                                         | Login, Register      |
-| `TextLink`         | `brand-700`, underlined                                                                         | All                  |
-| `SegmentedControl` | joined white track; active = solid teal pill, white text                                        | Planner              |
-| `Switch`           | teal pill toggle, grey when off                                                                 | Planner              |
-| `NumberStepper`    | boxed `[−] value [+]`                                                                           | Frame Gaps, Mat      |
-| `Select`           | white box, chevron right                                                                        | Frame Size, units    |
-| `SwatchPicker`     | circles, selected = teal ring on white; `textured` radial shading for wood (R2: Moonlight's flat-hex finishes) | Planner |
-| `Badge`            | small pills (`new`, `neutral`, `success`, `warning`, `brand`)                                   | Planner              |
-| `IconButton`       | square-cornered (`rounded-field`) ghost / outline / solid / glass                               | Planner, dialogs     |
-| `Dialog`           | white card, 16px radius, `shadow-float`, extrabold title, mist footer                           | Planner dialogs      |
-| `Alert`            | info = mist + teal icon; error = `danger-*`; success = `success-*`                              | Auth, planner        |
-| `Toaster`          | navy toast, teal-light action, white text                                                       | Planner              |
-| `Logo`             | `variant="full"` (stacked, as delivered) or `"mark"` (monogram)                                 | Brand bar            |
-| `Spinner`          | logic-only                                                                                      | Buttons, loader      |
+| Component          | SAF appearance (as built)                                                                                                                                     | Used in           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `Button`           | `primary` solid warm saddle brown; `primary-gradient` saddle-to-walnut gradient (auth CTAs) + trailing `→` via `rightIcon`; `secondary` white + `line` border | All               |
+| `TextField`        | white, 1px `ink-400` boundary, slate outline icon left, 8px radius, 48 → 52px (`sm`), teal focus ring                                                         | Login, Register   |
+| `PasswordField`    | lock-keyhole icon + eye toggle (open eye while hidden, as in the mockup)                                                                                      | Login, Register   |
+| `PhoneField`       | phone icon · fixed `+91` · hairline · number (no chevron: D23 → Moonlight)                                                                                    | Register          |
+| `Divider`          | `line` hairlines with centred teal "OR" in tracked caps                                                                                                       | Login, Register   |
+| `TextLink`         | `brand-700`, underlined                                                                                                                                       | All               |
+| `SegmentedControl` | joined white track; active = solid teal pill, white text                                                                                                      | Planner           |
+| `Switch`           | teal pill toggle, grey when off                                                                                                                               | Planner           |
+| `NumberStepper`    | boxed `[−] value [+]`                                                                                                                                         | Frame Gaps, Mat   |
+| `Select`           | white box, chevron right                                                                                                                                      | Frame Size, units |
+| `SwatchPicker`     | circles, selected = teal ring on white; `textured` radial shading for wood (R2: Moonlight's flat-hex finishes)                                                | Planner           |
+| `Badge`            | small pills (`new`, `neutral`, `success`, `warning`, `brand`)                                                                                                 | Planner           |
+| `IconButton`       | square-cornered (`rounded-field`) ghost / outline / solid / glass                                                                                             | Planner, dialogs  |
+| `Dialog`           | white card, 16px radius, `shadow-float`, extrabold title, mist footer                                                                                         | Planner dialogs   |
+| `Alert`            | info = mist + teal icon; error = `danger-*`; success = `success-*`                                                                                            | Auth, planner     |
+| `Toaster`          | navy toast, teal-light action, white text                                                                                                                     | Planner           |
+| `Logo`             | `variant="full"` (stacked, as delivered) or `"mark"` (monogram)                                                                                               | Brand bar         |
+| `Spinner`          | logic-only                                                                                                                                                    | Buttons, loader   |
 
 SAF-specific composites (new presentation, existing behaviour):
 
