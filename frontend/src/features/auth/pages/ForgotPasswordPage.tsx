@@ -93,7 +93,10 @@ export default function ForgotPasswordPage() {
       setStep('otp')
     } catch (err) {
       if (isApiError(err)) {
-        if (err.status === 429) {
+        if (err.code === 'EMAIL_QUOTA_EXCEEDED' || err.code === 'EMAIL_RECIPIENT_LIMIT_REACHED') {
+          // Daily/monthly email limit: the server message says when to try again.
+          setFormError(err.message)
+        } else if (err.status === 429) {
           setFormError('Too many attempts. Please wait before requesting another code.')
         } else {
           setFormError(err.message || 'Unable to send verification code. Please try again.')

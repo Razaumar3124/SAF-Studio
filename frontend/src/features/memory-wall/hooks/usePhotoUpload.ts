@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { resolveApiUrl } from '@/services/apiClient'
+import { isApiError, resolveApiUrl } from '@/services/apiClient'
 import { uploadPhoto } from '@/services/photoApi'
 import { tokenStorage } from '@/services/tokenStorage'
 import { PHOTO_UPLOAD_MIME_TYPES } from '@/types/api'
 import type { PhotoRef } from '../lib/plannerState'
 
-export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+/** Largest accepted upload; the server stores a compressed copy of at most 2 MB. */
+export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 const MIN_SIDE_PX = 300
 
 export type UploadResult =
@@ -35,7 +36,7 @@ export function usePhotoUpload() {
       return { ok: false, error: 'Please choose a JPEG, PNG or WebP photo.' }
     }
     if (file.size > MAX_UPLOAD_BYTES) {
-      return { ok: false, error: 'That photo is larger than 25 MB. Please choose a smaller file.' }
+      return { ok: false, error: 'That photo is larger than 15 MB. Please choose a smaller file.' }
     }
 
     const localUrl = URL.createObjectURL(file)
@@ -75,8 +76,20 @@ export function usePhotoUpload() {
               heightPx: res.height_px || img.naturalHeight,
             },
           }
-        } catch {
-          // If server upload fails (e.g. temporary network blip), fallback to local preview
+        } catch (err) {
+          // The server answered with a reason (storage full, library limit, invalid image, …):
+          // show it instead of pretending the photo was saved.
+          if (isApiError(err) && !err.isNetworkError) {
+            URL.revokeObjectURL(localUrl)
+            return {
+              ok: false,
+              error:
+                err.status >= 500 && err.status !== 507
+                  ? 'We couldn’t save your photo right now. Please try again in a moment.'
+                  : err.message,
+            }
+          }
+          // Network blip: keep a session-only local preview so the planner stays usable
           urls.current.add(localUrl)
           return {
             ok: true,

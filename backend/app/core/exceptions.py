@@ -12,12 +12,14 @@ class AppException(Exception):
         code: str = "INTERNAL_ERROR",
         status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
         details: list[dict[str, Any]] | None = None,
+        headers: dict[str, str] | None = None,
     ):
         super().__init__(message)
         self.message = message
         self.code = code
         self.status_code = status_code
         self.details = details or []
+        self.headers = headers or {}
 
 
 class DatabaseUnavailableException(AppException):
@@ -190,6 +192,88 @@ class ForbiddenException(AppException):
             code="FORBIDDEN",
             status_code=status.HTTP_403_FORBIDDEN,
             details=[{"field": field, "issue": message}],
+        )
+
+
+class EmailQuotaExceededException(AppException):
+    """Raised when a daily/monthly email quota (app-wide or per recipient) is exhausted.
+
+    `scope` is "day" or "month" for the app-wide Resend quota and "recipient" for the
+    per-address daily allowance. `retry_after` is the number of seconds until the quota resets.
+    """
+
+    MESSAGES = {
+        "day": (
+            "We've reached today's limit for sending verification codes. "
+            "Please try again tomorrow."
+        ),
+        "month": (
+            "We've reached this month's limit for sending verification codes. "
+            "Please try again next month or contact us on WhatsApp for help."
+        ),
+        "recipient": (
+            "You've reached today's limit for verification codes. Please try again tomorrow."
+        ),
+    }
+
+    def __init__(self, scope: str, retry_after: int):
+        self.scope = scope
+        self.retry_after = max(1, int(retry_after))
+        super().__init__(
+            message=self.MESSAGES.get(scope, self.MESSAGES["day"]),
+            code=(
+                "EMAIL_RECIPIENT_LIMIT_REACHED" if scope == "recipient" else "EMAIL_QUOTA_EXCEEDED"
+            ),
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            details=[{"field": "email", "issue": f"Email {scope} quota reached"}],
+            headers={"Retry-After": str(self.retry_after)},
+        )
+
+
+class StorageQuotaExceededException(AppException):
+    """Raised when accepting an upload would push total R2 storage past the hard cap."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message=(
+                "Photo uploads are temporarily paused because our storage is full. "
+                "Your existing photos and designs are safe."
+            ),
+            code="STORAGE_QUOTA_EXCEEDED",
+            status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
+            details=[{"field": "file", "issue": "Storage capacity reached"}],
+        )
+
+
+class UserStorageQuotaExceededException(AppException):
+    """Raised when a user's photo library would exceed the per-user storage limit."""
+
+    def __init__(self, limit_mb: int) -> None:
+        super().__init__(
+            message=(
+                f"Your photo library is full ({limit_mb} MB). "
+                "Remove a few photos you no longer need to upload more."
+            ),
+            code="USER_STORAGE_LIMIT_REACHED",
+            status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
+            details=[
+                {"field": "file", "issue": f"Per-user storage limit of {limit_mb} MB reached"}
+            ],
+        )
+
+
+class DatabaseStorageFullException(AppException):
+    """Raised when MongoDB Atlas rejects a write because the storage quota is exhausted."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message=(
+                "We couldn't save this right now because our database storage is full. "
+                "Your existing designs and photos are safe. Please try again later."
+            ),
+            code="DATABASE_STORAGE_FULL",
+            status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
+            details=[{"field": "database", "issue": "Database storage quota reached"}],
         )
 
 

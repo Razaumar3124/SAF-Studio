@@ -1,3 +1,4 @@
+import { isApiError } from '@/services/apiClient'
 import { tokenStorage } from '@/services/tokenStorage'
 import * as designApi from '@/services/designApi'
 import {
@@ -138,7 +139,12 @@ export const savedDesignsStore = {
     return read()
   },
 
-  save(state: PlannerState, title: string): SavedDesign {
+  /**
+   * Saves locally first, then syncs to the account in the background. `onRemoteError` is called
+   * with the server's message when the server rejects the sync (e.g. storage full, too many
+   * saves); the local copy is kept either way.
+   */
+  save(state: PlannerState, title: string, onRemoteError?: (message: string) => void): SavedDesign {
     const { state: clean, dropped } = stripUploads(state)
     const name = title.trim().replace(/\s+/g, ' ').slice(0, 80) || 'Untitled wall'
     const tempId = `d${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
@@ -177,8 +183,9 @@ export const savedDesignsStore = {
             next[index] = updated
             write(next)
           }
-        } catch {
-          // Keep local design if remote sync fails
+        } catch (err) {
+          // Keep local design if remote sync fails; report server-side rejections
+          if (isApiError(err) && !err.isNetworkError) onRemoteError?.(err.message)
         }
       })()
     }

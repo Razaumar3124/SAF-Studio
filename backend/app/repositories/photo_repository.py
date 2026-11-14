@@ -25,6 +25,17 @@ class PhotoRepository:
                 ],
                 name="idx_photos_user",
             ),
+            # One active copy of identical bytes per user (duplicate-upload detection).
+            # Legacy photos without content_hash are excluded by the partial filter.
+            IndexModel(
+                [("user_id", ASCENDING), ("content_hash", ASCENDING)],
+                name="idx_photos_user_content_hash",
+                unique=True,
+                partialFilterExpression={
+                    "is_deleted": False,
+                    "content_hash": {"$type": "string"},
+                },
+            ),
         ]
         await self.collection.create_indexes(indexes)
 
@@ -74,6 +85,32 @@ class PhotoRepository:
         async for doc in cursor:
             items.append(PhotoInDB(**doc))
         return items, total
+
+    async def get_active_by_content_hash(self, user_id: str, content_hash: str) -> PhotoInDB | None:
+        """Find the user's active photo with identical uploaded bytes, if any."""
+        if not ObjectId.is_valid(user_id):
+            return None
+        doc = await self.collection.find_one(
+            {"user_id": ObjectId(user_id), "content_hash": content_hash, "is_deleted": False}
+        )
+        return PhotoInDB(**doc) if doc else None
+
+    async def sum_active_storage_bytes(self, user_id: str) -> int:
+        """Total stored bytes of the user's active photos (legacy photos: original size)."""
+        if not ObjectId.is_valid(user_id):
+            return 0
+        pipeline = [
+            {"$match": {"user_id": ObjectId(user_id), "is_deleted": False}},
+            {
+                "$group": {
+                    "_id": None,
+                    "total": {"$sum": {"$ifNull": ["$stored_bytes", "$file_size_bytes"]}},
+                }
+            },
+        ]
+        cursor = await self.collection.aggregate(pipeline)
+        docs = await cursor.to_list(length=1)
+        return int(docs[0]["total"]) if docs else 0
 
     async def update_visual_analysis(self, photo_id: str, analysis: VisualAnalysis) -> bool:
         """Cache visual analysis on photo document."""

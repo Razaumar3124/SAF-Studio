@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 from app.core.config import get_settings
 from app.core.exceptions import (
@@ -10,6 +11,7 @@ from app.core.exceptions import (
     RateLimitExceededException,
     ResourceNotFoundException,
     StorageUnavailableException,
+    UserStorageQuotaExceededException,
 )
 from app.core.security import generate_photo_signature, verify_photo_signature
 from app.models.photo import PhotoInDB
@@ -19,8 +21,9 @@ from app.schemas.photo import (
     PhotoSummaryOut,
     PhotoUploadResponse,
 )
-from app.services.image_processing_service import ImageProcessingService
+from app.services.image_processing_service import ImageProcessingService, compute_content_hash
 from app.services.rate_limiter import rate_limiter
+from app.services.storage_quota_service import StorageQuotaService, StorageReservation
 from app.storage.r2_storage import R2Storage
 
 logger = logging.getLogger("saf_studio.photo_service")
@@ -34,10 +37,12 @@ class PhotoService:
         photo_repo: PhotoRepository,
         image_service: ImageProcessingService,
         r2_storage: R2Storage,
+        storage_quota: StorageQuotaService,
     ) -> None:
         self.photo_repo = photo_repo
         self.image_service = image_service
         self.r2_storage = r2_storage
+        self.storage_quota = storage_quota
 
     def _generate_signed_urls(self, photo_id: str) -> tuple[str, str]:
         """Generate short-lived HMAC signed paths for thumbnail and preview."""
@@ -79,56 +84,56 @@ class PhotoService:
         # 2. Sanitize and trim filename
         clean_filename = filename.strip()[:120] if filename else "untitled.jpg"
 
-        # 3. Validate and process image via ImageProcessingService (Pillow)
+        # 3. Duplicate detection: identical bytes already in this user's library
+        if len(file_bytes) <= settings.max_upload_bytes:
+            existing = await self.photo_repo.get_active_by_content_hash(
+                user_id, compute_content_hash(file_bytes)
+            )
+            if existing:
+                logger.info("Duplicate upload for user %s matched photo %s", user_id, existing.id)
+                return self._to_upload_response(existing)
+
+        # 4. Validate, normalize and compress (WebP master <= 2 MB, preview, thumbnail)
         processed = await self.image_service.process_image(
             file_bytes,
             declared_content_type=declared_content_type,
         )
 
-        # 4. Generate persistent storage keys with secure random ObjectId
-        photo_id = str(ObjectId())
-        ext_map = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
-        orig_ext = ext_map.get(processed.mime_type, ".jpg")
+        # 5. Per-user library limit (stored bytes of active photos)
+        limit_bytes = settings.user_photo_storage_limit_bytes
+        used_bytes = await self.photo_repo.sum_active_storage_bytes(user_id)
+        if used_bytes + processed.stored_bytes > limit_bytes:
+            raise UserStorageQuotaExceededException(settings.USER_PHOTO_STORAGE_LIMIT_MB)
 
-        orig_key = f"users/{user_id}/photos/{photo_id}/original{orig_ext}"
+        # 6. Reserve global R2 capacity before writing anything (9.9 GB hard cap)
+        reservation = await self.storage_quota.reserve(processed.stored_bytes)
+
+        # 7. Persistent storage keys with secure random ObjectId
+        photo_id = str(ObjectId())
+        master_key = f"users/{user_id}/photos/{photo_id}/master.webp"
         prev_key = f"users/{user_id}/photos/{photo_id}/preview.webp"
         thumb_key = f"users/{user_id}/photos/{photo_id}/thumbnail.webp"
+        variants = [
+            (master_key, processed.master_bytes, "master"),
+            (prev_key, processed.preview_bytes, "preview"),
+            (thumb_key, processed.thumbnail_bytes, "thumbnail"),
+        ]
 
         uploaded_keys: list[str] = []
         try:
-            # 5. Upload original image to Cloudflare R2
-            await self.r2_storage.put_object(
-                key=orig_key,
-                data=processed.original_bytes,
-                content_type=processed.mime_type,
-                metadata={"user_id": user_id, "photo_id": photo_id},
-            )
-            uploaded_keys.append(orig_key)
-
-            # 6. Upload 1600px preview WebP to Cloudflare R2
-            await self.r2_storage.put_object(
-                key=prev_key,
-                data=processed.preview_bytes,
-                content_type="image/webp",
-                metadata={"user_id": user_id, "photo_id": photo_id, "type": "preview"},
-            )
-            uploaded_keys.append(prev_key)
-
-            # 7. Upload 300px thumbnail WebP to Cloudflare R2
-            await self.r2_storage.put_object(
-                key=thumb_key,
-                data=processed.thumbnail_bytes,
-                content_type="image/webp",
-                metadata={"user_id": user_id, "photo_id": photo_id, "type": "thumbnail"},
-            )
-            uploaded_keys.append(thumb_key)
-
+            for key, data, kind in variants:
+                await self.r2_storage.put_object(
+                    key=key,
+                    data=data,
+                    content_type="image/webp",
+                    metadata={"user_id": user_id, "photo_id": photo_id, "type": kind},
+                )
+                uploaded_keys.append(key)
         except Exception as exc:
             logger.error("R2 upload failure, rolling back uploaded objects: %s", exc)
-            if uploaded_keys:
-                await self.r2_storage.delete_objects(uploaded_keys)
+            await self._rollback(uploaded_keys, reservation)
             raise StorageUnavailableException(
-                issue=f"Failed to store photograph in Cloudflare R2: {exc}"
+                issue="Failed to store photograph in Cloudflare R2"
             ) from exc
 
         # 8. Save photograph metadata document in MongoDB
@@ -137,7 +142,7 @@ class PhotoService:
             id=photo_id,
             user_id=user_id,
             original_filename=clean_filename,
-            storage_key=orig_key,
+            storage_key=master_key,
             thumbnail_key=thumb_key,
             preview_key=prev_key,
             storage_provider="cloudflare_r2",
@@ -148,6 +153,9 @@ class PhotoService:
             height_px=processed.natural_height,
             aspect_ratio=processed.aspect_ratio,
             suggested_orientation=processed.suggested_orientation,
+            content_hash=processed.content_hash,
+            stored_bytes=processed.stored_bytes,
+            variant_bytes={kind: len(data) for _, data, kind in variants},
             status="ready",
             is_deleted=False,
             created_at=now,
@@ -156,27 +164,51 @@ class PhotoService:
 
         try:
             await self.photo_repo.create(photo_doc)
+        except DuplicateKeyError:
+            # A concurrent identical upload won the race: keep that one, discard ours.
+            await self._rollback(uploaded_keys, reservation)
+            existing = await self.photo_repo.get_active_by_content_hash(
+                user_id, processed.content_hash
+            )
+            if existing:
+                return self._to_upload_response(existing)
+            raise
         except Exception as exc:
             logger.error("MongoDB metadata persistence failed, rolling back R2 objects: %s", exc)
-            await self.r2_storage.delete_objects(uploaded_keys)
+            await self._rollback(uploaded_keys, reservation)
             raise
 
-        # 9. Generate secure short-lived URLs for direct <img src> rendering
-        thumbnail_url, preview_url = self._generate_signed_urls(photo_id)
+        await self.storage_quota.commit(reservation)
+        return self._to_upload_response(photo_doc)
 
+    async def _rollback(self, uploaded_keys: list[str], reservation: StorageReservation) -> None:
+        """Remove partially written objects and return the reserved capacity.
+
+        Objects that cannot be deleted stay accounted as used (no Mongo document references
+        them, so the maintenance job deletes them later and frees their bytes then).
+        """
+        failed = await self.r2_storage.delete_objects(uploaded_keys) if uploaded_keys else []
+        if failed:
+            await self.storage_quota.commit(reservation)
+        else:
+            await self.storage_quota.release(reservation)
+
+    def _to_upload_response(self, photo: PhotoInDB) -> PhotoUploadResponse:
+        """Build the upload response with fresh short-lived signed media URLs."""
+        thumbnail_url, preview_url = self._generate_signed_urls(str(photo.id))
         return PhotoUploadResponse(
-            id=photo_id,
-            user_id=user_id,
-            original_filename=clean_filename,
-            file_size_bytes=processed.file_size_bytes,
-            mime_type=processed.mime_type,
-            width_px=processed.natural_width,
-            height_px=processed.natural_height,
-            aspect_ratio=processed.aspect_ratio,
-            suggested_orientation=processed.suggested_orientation,
+            id=str(photo.id),
+            user_id=str(photo.user_id),
+            original_filename=photo.original_filename,
+            file_size_bytes=photo.file_size_bytes,
+            mime_type=photo.mime_type,
+            width_px=photo.width_px,
+            height_px=photo.height_px,
+            aspect_ratio=photo.aspect_ratio,
+            suggested_orientation=photo.suggested_orientation,
             thumbnail_url=thumbnail_url,
             preview_url=preview_url,
-            created_at=now.isoformat(),
+            created_at=photo.created_at.isoformat(),
         )
 
     async def list_user_photos(
@@ -266,10 +298,32 @@ class PhotoService:
         if str(photo.user_id) != str(user_id):
             raise ForbiddenException("You do not have permission to delete this photograph.")
 
-        # Soft delete in database first
+        # Soft delete in database first (the photo disappears from the library immediately)
         await self.photo_repo.soft_delete(photo_id, user_id)
 
-        # Remove R2 objects asynchronously
-        keys_to_delete = [photo.storage_key, photo.preview_key, photo.thumbnail_key]
-        await self.r2_storage.delete_objects(keys_to_delete)
-        logger.info("Deleted photo %s and its R2 storage assets", photo_id)
+        # Sizes for exact storage accounting: known for new photos, looked up for legacy ones
+        keys = [photo.storage_key, photo.preview_key, photo.thumbnail_key]
+        sizes: dict[str, int] = {}
+        if photo.variant_bytes:
+            sizes = {
+                photo.storage_key: photo.variant_bytes.get("master", 0),
+                photo.preview_key: photo.variant_bytes.get("preview", 0),
+                photo.thumbnail_key: photo.variant_bytes.get("thumbnail", 0),
+            }
+        else:
+            for key in keys:
+                try:
+                    sizes[key] = await self.r2_storage.get_object_size(key) or 0
+                except StorageUnavailableException:
+                    sizes[key] = 0  # unknown; reconciliation corrects the ledger later
+
+        failed = set(await self.r2_storage.delete_objects(keys))
+        await self.storage_quota.free(sum(size for key, size in sizes.items() if key not in failed))
+        if failed:
+            logger.warning(
+                "Photo %s soft-deleted but %d R2 object(s) remain; cleanup will retry",
+                photo_id,
+                len(failed),
+            )
+        else:
+            logger.info("Deleted photo %s and its R2 storage assets", photo_id)

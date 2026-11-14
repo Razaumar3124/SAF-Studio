@@ -460,10 +460,41 @@ class FakePhotoRepository:
         pass
 
     async def create(self, photo):
+        from pymongo.errors import DuplicateKeyError
+
+        # Mirror the partial unique index on (user_id, content_hash) for active photos
+        if photo.content_hash:
+            for d in self.photos.values():
+                if (
+                    str(d.get("user_id")) == str(photo.user_id)
+                    and d.get("content_hash") == photo.content_hash
+                    and not d.get("is_deleted", False)
+                ):
+                    raise DuplicateKeyError("E11000 duplicate key: idx_photos_user_content_hash")
         doc = photo.model_dump(by_alias=True)
         doc["_id"] = str(photo.id)
         self.photos[str(photo.id)] = doc
         return photo
+
+    async def get_active_by_content_hash(self, user_id: str, content_hash: str):
+        from app.models.photo import PhotoInDB
+
+        for d in self.photos.values():
+            if (
+                str(d.get("user_id")) == str(user_id)
+                and d.get("content_hash") == content_hash
+                and not d.get("is_deleted", False)
+            ):
+                return PhotoInDB(**d)
+        return None
+
+    async def sum_active_storage_bytes(self, user_id: str) -> int:
+        total = 0
+        for d in self.photos.values():
+            if str(d.get("user_id")) == str(user_id) and not d.get("is_deleted", False):
+                stored = d.get("stored_bytes")
+                total += stored if stored is not None else d.get("file_size_bytes", 0)
+        return total
 
     async def get_by_id(self, photo_id: str, include_deleted: bool = False):
         from app.models.photo import PhotoInDB
@@ -523,9 +554,12 @@ class FakeR2Storage:
 
     def __init__(self) -> None:
         self.objects: dict[str, tuple[bytes, str, dict]] = {}
+        self.modified_at: dict[str, datetime] = {}
         self.bucket_name = "saf-studio-photos-test"
         self.should_fail_upload = False
         self.should_fail_download = False
+        self.fail_delete_keys: set[str] = set()
+        self.list_calls = 0
 
     async def put_object(
         self,
@@ -540,6 +574,7 @@ class FakeR2Storage:
             raise StorageUnavailableException(issue="Simulated R2 network failure on upload")
 
         self.objects[key] = (data, content_type, metadata or {})
+        self.modified_at[key] = datetime.now(UTC)
         return key
 
     async def get_object(self, key: str) -> tuple[bytes, str]:
@@ -560,11 +595,39 @@ class FakeR2Storage:
         return data, c_type
 
     async def delete_object(self, key: str) -> bool:
+        if key in self.fail_delete_keys:
+            return False
+        self.modified_at.pop(key, None)
         return self.objects.pop(key, None) is not None
 
-    async def delete_objects(self, keys: list[str]) -> None:
+    async def delete_objects(self, keys: list[str]) -> list[str]:
+        failed = []
         for k in keys:
+            if k in self.fail_delete_keys:
+                failed.append(k)
+                continue
             self.objects.pop(k, None)
+            self.modified_at.pop(k, None)
+        return failed
+
+    async def list_objects(self, prefix: str = ""):
+        from app.storage.r2_storage import StoredObject
+
+        self.list_calls += 1
+        return [
+            StoredObject(
+                key=k, size=len(v[0]), last_modified=self.modified_at.get(k, datetime.now(UTC))
+            )
+            for k, v in self.objects.items()
+            if k.startswith(prefix)
+        ]
+
+    async def total_bytes(self, prefix: str = "") -> int:
+        return sum(o.size for o in await self.list_objects(prefix))
+
+    async def get_object_size(self, key: str) -> int | None:
+        obj = self.objects.get(key)
+        return len(obj[0]) if obj else None
 
     async def generate_presigned_url(self, key: str, expires_in: int = 3600) -> str:
         return (
@@ -715,6 +778,46 @@ class FakeDesignRepository:
         return [DesignVersionInDB(**v) for v in design_versions]
 
 
+    async def prune_versions(
+        self, design_id: str, keep_latest: int, current_version_id: str
+    ) -> int:
+        did = str(design_id)
+        versions = sorted(
+            (v for v in self.versions.values() if str(v.get("design_id")) == did),
+            key=lambda v: v.get("version_number", 0),
+            reverse=True,
+        )
+        if len(versions) <= keep_latest:
+            return 0
+        boundary = versions[keep_latest - 1]["version_number"]
+        doomed = [
+            str(v["_id"])
+            for v in versions
+            if v["version_number"] < boundary and str(v["_id"]) != str(current_version_id)
+        ]
+        for vid in doomed:
+            del self.versions[vid]
+        return len(doomed)
+
+    async def list_soft_deleted_before(self, cutoff: datetime, limit: int = 200) -> list[str]:
+        out = []
+        for did, d in self.designs.items():
+            deleted_at = d.get("deleted_at")
+            if d.get("is_deleted") and deleted_at and deleted_at < cutoff:
+                out.append(did)
+        return out[:limit]
+
+    async def purge_design(self, design_id: str) -> bool:
+        did = str(design_id)
+        doc = self.designs.get(did)
+        if not doc or not doc.get("is_deleted"):
+            return False
+        del self.designs[did]
+        for vid in [k for k, v in self.versions.items() if str(v.get("design_id")) == did]:
+            del self.versions[vid]
+        return True
+
+
 class FakeQuoteRepository:
     """In-memory mock repository simulating MongoDB 'quotes' collection."""
 
@@ -775,6 +878,12 @@ class FakeQuoteRepository:
         paged = matches[skip : skip + limit]
         return [QuoteInDB(**q) for q in paged]
 
+    async def exists_with_preview_key(self, preview_key: str) -> bool:
+        return any(q.get("preview_image_key") == preview_key for q in self.quotes.values())
+
+    async def exists_for_design(self, design_id: str) -> bool:
+        return any(q.get("design_id") == str(design_id) for q in self.quotes.values())
+
     async def delete(self, quote_id: str) -> bool:
         qid = str(quote_id)
         if qid in self.quotes:
@@ -785,3 +894,106 @@ class FakeQuoteRepository:
                 del self.quotes[k]
                 return True
         return False
+
+
+class FakeUsageRepository:
+    """In-memory mirror of UsageRepository with the same atomic semantics.
+
+    Each method body runs without awaiting, so on a single event loop every operation is
+    atomic, just like the single-document MongoDB updates it stands in for.
+    """
+
+    def __init__(self) -> None:
+        self.counters: dict[str, dict] = {}
+        self.storage: dict[str, dict] = {}
+        self.reservations: dict[str, dict] = {}
+
+    async def create_indexes(self) -> None:
+        pass
+
+    async def increment_counter(self, key: str, limit: int, expires_at: datetime) -> bool:
+        if limit <= 0:
+            return False
+        doc = self.counters.setdefault(key, {"count": 0, "expires_at": expires_at})
+        if doc["count"] >= limit:
+            return False
+        doc["count"] += 1
+        return True
+
+    async def decrement_counter(self, key: str) -> None:
+        doc = self.counters.get(key)
+        if doc and doc["count"] > 0:
+            doc["count"] -= 1
+
+    async def saturate_counter(self, key: str, limit: int, expires_at: datetime) -> None:
+        doc = self.counters.setdefault(key, {"count": 0, "expires_at": expires_at})
+        doc["count"] = max(doc["count"], limit)
+
+    async def get_counter(self, key: str) -> int:
+        return self.counters.get(key, {}).get("count", 0)
+
+    async def get_scope(self, scope: str):
+        doc = self.storage.get(scope)
+        return dict(doc) if doc else None
+
+    async def seed_scope(self, scope: str, used_bytes: int) -> None:
+        self.storage.setdefault(
+            scope, {"_id": scope, "used_bytes": int(used_bytes), "reserved_bytes": 0, "seq": 0}
+        )
+
+    async def try_reserve(self, scope: str, nbytes: int, cap: int) -> bool:
+        doc = self.storage.get(scope)
+        if not doc or doc["used_bytes"] + doc["reserved_bytes"] + nbytes > cap:
+            return False
+        doc["reserved_bytes"] += nbytes
+        doc["seq"] += 1
+        return True
+
+    async def commit_reserved(self, scope: str, nbytes: int) -> None:
+        doc = self.storage[scope]
+        doc["reserved_bytes"] -= nbytes
+        doc["used_bytes"] += nbytes
+        doc["seq"] += 1
+
+    async def release_reserved(self, scope: str, nbytes: int) -> None:
+        doc = self.storage[scope]
+        doc["reserved_bytes"] = max(0, doc["reserved_bytes"] - nbytes)
+        doc["seq"] += 1
+
+    async def release_used(self, scope: str, nbytes: int) -> None:
+        if nbytes <= 0 or scope not in self.storage:
+            return
+        doc = self.storage[scope]
+        doc["used_bytes"] = max(0, doc["used_bytes"] - nbytes)
+        doc["seq"] += 1
+
+    async def reconcile_scope(
+        self, scope: str, used_bytes: int, reserved_bytes: int, expected_seq: int
+    ) -> bool:
+        doc = self.storage.get(scope)
+        if not doc or doc["seq"] != expected_seq:
+            return False
+        doc["used_bytes"] = int(used_bytes)
+        doc["reserved_bytes"] = int(reserved_bytes)
+        doc["seq"] += 1
+        return True
+
+    async def create_reservation(self, scope: str, nbytes: int) -> str:
+        rid = str(ObjectId())
+        self.reservations[rid] = {
+            "_id": rid,
+            "scope": scope,
+            "bytes": nbytes,
+            "created_at": datetime.now(UTC),
+        }
+        return rid
+
+    async def delete_reservation(self, reservation_id: str) -> bool:
+        return self.reservations.pop(reservation_id, None) is not None
+
+    async def list_reservations(self, older_than: datetime | None = None) -> list[dict]:
+        return [
+            dict(r)
+            for r in self.reservations.values()
+            if older_than is None or r["created_at"] < older_than
+        ]

@@ -1,7 +1,10 @@
+import json
 from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.core.config import get_settings
 
 
 class DesignWallSchema(BaseModel):
@@ -193,6 +196,18 @@ class SaveDesignVersionRequest(BaseModel):
         default=None,
         description="Optional preview flags: sofa, index_badges, guides",
     )
+
+    @field_validator("layout_metadata", "preview")
+    @classmethod
+    def limit_json_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Free-form JSON is stored verbatim in every version: keep it small."""
+        if v is None:
+            return v
+        limit = get_settings().DESIGN_JSON_FIELD_MAX_BYTES
+        size = len(json.dumps(v, default=str, separators=(",", ":")).encode("utf-8"))
+        if size > limit:
+            raise ValueError(f"must be at most {limit} bytes when serialized (got {size})")
+        return v
 
 
 class BoundingBoxSchema(BaseModel):

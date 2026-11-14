@@ -1,5 +1,6 @@
 """Core Quote Service orchestrating design capture, validation, R2 storage, and WhatsApp linking."""
 
+import asyncio
 import io
 import logging
 from datetime import UTC, datetime, timedelta
@@ -27,8 +28,9 @@ from app.schemas.quote import (
     QuotePrepareInput,
     QuotePrepareResponse,
 )
-from app.services.image_processing_service import ImageProcessingService
+from app.services.image_processing_service import ImageProcessingService, encode_webp_within
 from app.services.quote_report_service import QuoteReportService
+from app.services.storage_quota_service import StorageQuotaService
 from app.services.whatsapp_service import WhatsAppService
 from app.storage.r2_storage import R2Storage
 
@@ -63,12 +65,14 @@ class QuoteService:
         quote_repo: QuoteRepository,
         photo_repo: PhotoRepository,
         r2_storage: R2Storage,
+        storage_quota: StorageQuotaService,
         whatsapp_service: WhatsAppService | None = None,
         report_service: QuoteReportService | None = None,
     ) -> None:
         self.quote_repo = quote_repo
         self.photo_repo = photo_repo
         self.r2_storage = r2_storage
+        self.storage_quota = storage_quota
         self.whatsapp_service = whatsapp_service or WhatsAppService()
         self.report_service = report_service or QuoteReportService()
 
@@ -169,6 +173,21 @@ class QuoteService:
                 details=[{"field": "preview_image", "issue": f"Decompression failed: {exc}"}],
             ) from exc
 
+    @staticmethod
+    def _compress_preview(file_bytes: bytes) -> bytes:
+        """Re-encode a validated wall preview as WebP within the configured size limits."""
+        settings = get_settings()
+        with Image.open(io.BytesIO(file_bytes)) as img:
+            img.load()
+            has_alpha = "A" in img.mode or "transparency" in img.info
+            converted = img.convert("RGBA" if has_alpha else "RGB")
+        data, _ = encode_webp_within(
+            converted,
+            max_bytes=settings.QUOTE_PREVIEW_MAX_BYTES,
+            max_edge_px=settings.QUOTE_PREVIEW_MAX_EDGE_PX,
+        )
+        return data
+
     async def prepare_quote(
         self,
         current_user: UserInDB,
@@ -266,31 +285,39 @@ class QuoteService:
                 )
             )
 
-        # 4. Validate preview image and sniff MIME type
-        mime_type, img_w, img_h = await self.validate_preview_image(preview_bytes)
+        # 4. Validate preview image, then compress it to WebP for storage
+        await self.validate_preview_image(preview_bytes)
+        stored_preview = await asyncio.to_thread(self._compress_preview, preview_bytes)
+        mime_type = "image/webp"
+        with Image.open(io.BytesIO(stored_preview)) as stored_img:
+            img_w, img_h = stored_img.size
 
-        # 5. Generate unique quote reference (SQ-YYYY-XXXX) and tokens
-        quote_reference = await self.quote_repo.get_next_quote_reference()
-        raw_share_token = generate_secure_token(32)
-        share_token_hash = hash_token(raw_share_token)
-        share_token_prefix = raw_share_token[:8]
-        expires_at = datetime.now(UTC) + timedelta(days=settings.QUOTE_SHARE_EXPIRY_DAYS)
+        # 5. Reserve R2 capacity (9.9 GB hard cap) before allocating a reference
+        reservation = await self.storage_quota.reserve(len(stored_preview))
 
-        # 6. Upload preview image to Cloudflare R2
-        ext = "webp" if mime_type == "image/webp" else "png"
-        preview_key = f"quotes/{current_user.id}/{quote_reference}/preview.{ext}"
+        try:
+            quote_reference = await self.quote_repo.get_next_quote_reference()
+            raw_share_token = generate_secure_token(32)
+            share_token_hash = hash_token(raw_share_token)
+            share_token_prefix = raw_share_token[:8]
+            expires_at = datetime.now(UTC) + timedelta(days=settings.QUOTE_SHARE_EXPIRY_DAYS)
 
-        await self.r2_storage.put_object(
-            key=preview_key,
-            data=preview_bytes,
-            content_type=mime_type,
-            metadata={
-                "quote_reference": quote_reference,
-                "user_id": str(current_user.id),
-                "width": str(img_w),
-                "height": str(img_h),
-            },
-        )
+            # 6. Upload preview image to Cloudflare R2
+            preview_key = f"quotes/{current_user.id}/{quote_reference}/preview.webp"
+            await self.r2_storage.put_object(
+                key=preview_key,
+                data=stored_preview,
+                content_type=mime_type,
+                metadata={
+                    "quote_reference": quote_reference,
+                    "user_id": str(current_user.id),
+                    "width": str(img_w),
+                    "height": str(img_h),
+                },
+            )
+        except Exception:
+            await self.storage_quota.release(reservation)
+            raise
 
         # 7. Construct and persist immutable QuoteInDB document in MongoDB
         wall_snapshot = QuoteWallSnapshot(
@@ -335,8 +362,13 @@ class QuoteService:
                 preview_key,
                 exc,
             )
-            await self.r2_storage.delete_object(preview_key)
+            if await self.r2_storage.delete_object(preview_key):
+                await self.storage_quota.release(reservation)
+            else:
+                await self.storage_quota.commit(reservation)  # orphan cleanup frees it later
             raise
+
+        await self.storage_quota.commit(reservation)
 
         # 8. Compose WhatsApp message and Click-to-Chat URL
         report_url = f"{settings.PUBLIC_APP_URL}/q/{raw_share_token}"

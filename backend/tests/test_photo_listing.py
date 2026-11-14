@@ -9,18 +9,17 @@ from tests.test_photo_upload import register_test_user
 async def test_list_photos_returns_user_photos(client: AsyncClient):
     """EP-PHOTO-02: Authenticated user can list their uploaded photos."""
     _, token = await register_test_user(client, "lister@example.com")
-    raw = make_test_image(width=500, height=400, fmt="JPEG")
 
-    # Upload two photos
+    # Upload two different photos (identical bytes would be de-duplicated)
     await client.post(
         "/api/v1/photos/upload",
         headers={"Authorization": f"Bearer {token}"},
-        files={"file": ("photo1.jpg", raw, "image/jpeg")},
+        files={"file": ("photo1.jpg", make_test_image(500, 400, "JPEG", "blue"), "image/jpeg")},
     )
     await client.post(
         "/api/v1/photos/upload",
         headers={"Authorization": f"Bearer {token}"},
-        files={"file": ("photo2.jpg", raw, "image/jpeg")},
+        files={"file": ("photo2.jpg", make_test_image(500, 400, "JPEG", "red"), "image/jpeg")},
     )
 
     response = await client.get(

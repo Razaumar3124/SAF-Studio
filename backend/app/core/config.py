@@ -131,8 +131,20 @@ class Settings(BaseSettings):
         description="Whether Resend testing mode is enabled to restrict recipient delivery",
     )
     RESEND_TEST_RECIPIENT: str = Field(
-        default="abdurrazzakshaikh31@gmail.com",
+        default="",
         description="Permitted testing recipient email during development when RESEND_TEST_MODE is enabled",
+    )
+    EMAIL_DAILY_LIMIT: int = Field(
+        default=100,
+        description="Maximum transactional emails per UTC day app-wide (Resend free tier: 100)",
+    )
+    EMAIL_MONTHLY_LIMIT: int = Field(
+        default=3000,
+        description="Maximum transactional emails per UTC calendar month (Resend free tier: 3,000)",
+    )
+    EMAIL_PER_RECIPIENT_DAILY_LIMIT: int = Field(
+        default=5,
+        description="Maximum verification emails per email address per UTC day",
     )
     EMAIL_OTP_EXPIRE_MINUTES: int = Field(
         default=10,
@@ -193,8 +205,46 @@ class Settings(BaseSettings):
         description="Explicit S3 endpoint URL override (defaults to Cloudflare R2 standard)",
     )
     R2_MAX_UPLOAD_MB: int = Field(
-        default=25,
-        description="Maximum allowed photo upload size in megabytes",
+        default=15,
+        description="Deprecated and ignored: use PHOTO_MAX_UPLOAD_MB",
+    )
+    PHOTO_MAX_UPLOAD_MB: int = Field(
+        default=15,
+        ge=1,
+        le=15,
+        description="Maximum accepted photo upload size in megabytes (input, before compression)",
+    )
+    PHOTO_MASTER_MAX_BYTES: int = Field(
+        default=2_000_000,
+        description="Maximum stored size of the compressed WebP master image in bytes",
+    )
+    PHOTO_MASTER_MAX_EDGE_PX: int = Field(
+        default=4096,
+        description="Longest edge of the stored WebP master image in pixels",
+    )
+    QUOTE_PREVIEW_MAX_BYTES: int = Field(
+        default=1_000_000,
+        description="Maximum stored size of a compressed quote wall preview in bytes",
+    )
+    QUOTE_PREVIEW_MAX_EDGE_PX: int = Field(
+        default=2400,
+        description="Longest edge of the stored quote wall preview in pixels",
+    )
+    R2_STORAGE_HARD_CAP_BYTES: int = Field(
+        default=9_900_000_000,
+        description="Hard cap on total bytes stored in R2; uploads beyond it are rejected (9.9 GB)",
+    )
+    USER_PHOTO_STORAGE_LIMIT_MB: int = Field(
+        default=250,
+        description="Maximum stored photo library size per user in megabytes",
+    )
+    STORAGE_ORPHAN_GRACE_HOURS: int = Field(
+        default=24,
+        description="Minimum object age before an unreferenced R2 object may be cleaned up",
+    )
+    STORAGE_MAINTENANCE_INTERVAL_HOURS: int = Field(
+        default=24,
+        description="Interval for background storage cleanup and reconciliation (0 disables it)",
     )
     PHOTO_MAX_WIDTH_PX: int = Field(
         default=8192,
@@ -233,6 +283,29 @@ class Settings(BaseSettings):
     RATE_LIMIT_QUOTE_PREPARE_WINDOW_SECONDS: int = Field(
         default=3600,
         description="Time window in seconds for quote preparation rate limiting",
+    )
+
+    # Design persistence growth limits (MongoDB Atlas M0: 512 MB)
+    RATE_LIMIT_DESIGN_CREATE_MAX_ATTEMPTS: int = Field(
+        default=60,
+        description="Maximum new designs per user per hour",
+    )
+    RATE_LIMIT_DESIGN_VERSION_MAX_ATTEMPTS: int = Field(
+        default=120,
+        description="Maximum saved design versions per user per hour",
+    )
+    DESIGN_VERSION_RETENTION: int = Field(
+        default=20,
+        ge=1,
+        description="Most recent versions kept per design (the current one is always kept)",
+    )
+    DESIGN_PURGE_AFTER_DAYS: int = Field(
+        default=30,
+        description="Days after soft deletion before an unreferenced design is permanently removed",
+    )
+    DESIGN_JSON_FIELD_MAX_BYTES: int = Field(
+        default=4096,
+        description="Max serialized size of free-form design JSON (layout_metadata, preview)",
     )
 
     # Groq AI Creative Curator
@@ -332,8 +405,12 @@ class Settings(BaseSettings):
 
     @property
     def max_upload_bytes(self) -> int:
-        """Maximum allowed upload size in bytes."""
-        return self.R2_MAX_UPLOAD_MB * 1024 * 1024
+        """Maximum accepted photo upload size in bytes."""
+        return self.PHOTO_MAX_UPLOAD_MB * 1024 * 1024
+
+    @property
+    def user_photo_storage_limit_bytes(self) -> int:
+        return self.USER_PHOTO_STORAGE_LIMIT_MB * 1024 * 1024
 
     @property
     def is_production(self) -> bool:

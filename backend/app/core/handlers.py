@@ -4,12 +4,27 @@ from datetime import UTC, datetime
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pymongo.errors import OperationFailure, PyMongoError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.exceptions import AppException
+from app.core.config import get_settings
+from app.core.exceptions import AppException, DatabaseStorageFullException
 from app.schemas.common import ApiErrorDetail, ApiErrorPayload, ApiErrorResponse
 
 logger = logging.getLogger("saf_studio.errors")
+
+# Atlas shared/free tiers reject writes past the storage quota with AtlasError code 8000
+# ("you are over your space quota, using X MB of 512 MB").
+_ATLAS_SPACE_QUOTA_CODE = 8000
+
+
+def is_storage_quota_error(exc: BaseException) -> bool:
+    """Return True if a PyMongo error is Atlas rejecting a write for exceeding storage quota."""
+    if not isinstance(exc, OperationFailure):
+        return False
+    if exc.code == _ATLAS_SPACE_QUOTA_CODE:
+        return True
+    return "space quota" in str(exc).lower()
 
 
 def create_error_response(
@@ -17,6 +32,7 @@ def create_error_response(
     code: str,
     message: str,
     details: list[dict[str, str]] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     """Construct a uniform JSONResponse conforming to ApiErrorResponse."""
     detail_objs = [
@@ -31,17 +47,25 @@ def create_error_response(
     return JSONResponse(
         status_code=status_code,
         content=ApiErrorResponse(error=payload).model_dump(),
+        headers=headers or None,
     )
 
 
 async def app_exception_handler(_request: Request, exc: AppException) -> JSONResponse:
     """Handle custom application exceptions."""
     logger.warning("Application exception: code=%s, message=%s", exc.code, exc.message)
+    details = exc.details
+    # Server-side failure details (storage keys, provider errors) stay in the logs in production.
+    if exc.status_code >= 500 and get_settings().is_production:
+        if details:
+            logger.warning("Suppressed error details for %s: %s", exc.code, details)
+        details = [{"field": d.get("field", ""), "issue": "Service error"} for d in details]
     return create_error_response(
         status_code=exc.status_code,
         code=exc.code,
         message=exc.message,
-        details=exc.details,
+        details=details,
+        headers=exc.headers,
     )
 
 
@@ -93,6 +117,14 @@ async def http_exception_handler(
     )
 
 
+async def pymongo_exception_handler(request: Request, exc: PyMongoError) -> JSONResponse:
+    """Translate Atlas storage-quota write rejections into a friendly 507 response."""
+    if is_storage_quota_error(exc):
+        logger.error("MongoDB rejected a write: storage quota exhausted (%s)", exc)
+        return await app_exception_handler(request, DatabaseStorageFullException())
+    return await unhandled_exception_handler(request, exc)
+
+
 async def unhandled_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
     """Handle unexpected exceptions safely without leaking internal stack traces."""
     logger.exception("Unhandled server exception: %s", str(exc))
@@ -110,4 +142,5 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    app.add_exception_handler(PyMongoError, pymongo_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

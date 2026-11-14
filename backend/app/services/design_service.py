@@ -5,8 +5,10 @@ from typing import Any
 
 from bson import ObjectId
 
+from app.core.config import get_settings
 from app.core.exceptions import (
     ForbiddenException,
+    RateLimitExceededException,
     ResourceNotFoundException,
     ValidationException,
 )
@@ -35,6 +37,7 @@ from app.schemas.design import (
     SaveDesignVersionRequest,
     UpdateDesignRequest,
 )
+from app.services.rate_limiter import rate_limiter
 
 logger = logging.getLogger("saf_studio.design_service")
 
@@ -56,6 +59,16 @@ class DesignService:
         req: CreateDesignRequest,
     ) -> DesignOut:
         """Create a new design draft owned by the authenticated user (EP-DSGN-01)."""
+        settings = get_settings()
+        if not rate_limiter.is_allowed(
+            f"design_create:{user_id}",
+            max_attempts=settings.RATE_LIMIT_DESIGN_CREATE_MAX_ATTEMPTS,
+            window_seconds=3600,
+        ):
+            raise RateLimitExceededException(
+                "You're saving designs very quickly. Please wait a few minutes and try again."
+            )
+
         wall_in_db = DesignWallInDB(
             width_inches=req.wall.width_inches,
             height_inches=req.wall.height_inches,
@@ -359,6 +372,7 @@ class DesignService:
         req: SaveDesignVersionRequest,
     ) -> DesignVersionSummaryResponse:
         """Create an immutable snapshot version of a design layout (EP-DSGN-02)."""
+        settings = get_settings()
         if not ObjectId.is_valid(design_id):
             raise ResourceNotFoundException(f"Design '{design_id}' not found.", field="id")
 
@@ -523,10 +537,20 @@ class DesignService:
                     created_at=latest.created_at,
                 )
 
-        # 6. Atomic version number acquisition
+        # 6. Throttle new snapshots (identical re-saves above are free)
+        if not rate_limiter.is_allowed(
+            f"design_version:{user_id}",
+            max_attempts=settings.RATE_LIMIT_DESIGN_VERSION_MAX_ATTEMPTS,
+            window_seconds=3600,
+        ):
+            raise RateLimitExceededException(
+                "You're saving designs very quickly. Please wait a few minutes and try again."
+            )
+
+        # 7. Atomic version number acquisition
         version_number = await self.design_repo.get_next_version_number(design_id)
 
-        # 7. Create immutable version record
+        # 8. Create immutable version record
         now = datetime.now(UTC)
         version = DesignVersionInDB(
             design_id=design_id,
@@ -542,7 +566,7 @@ class DesignService:
 
         saved_version = await self.design_repo.create_version(version)
 
-        # 8. Update parent design pointers
+        # 9. Update parent design pointers
         await self.design_repo.update_design(
             design_id,
             {
@@ -551,6 +575,18 @@ class DesignService:
                 "status": "saved",
             },
         )
+
+        # 10. Version retention: keep only the newest versions (never the current one)
+        try:
+            pruned = await self.design_repo.prune_versions(
+                design_id,
+                keep_latest=settings.DESIGN_VERSION_RETENTION,
+                current_version_id=saved_version.id,
+            )
+            if pruned:
+                logger.info("Pruned %d old version(s) of design '%s'", pruned, design_id)
+        except Exception as exc:  # retention must never fail a successful save
+            logger.warning("Version pruning failed for design '%s': %s", design_id, exc)
 
         logger.info(
             "Created version %s for design '%s' (version_id: %s)",

@@ -129,7 +129,8 @@ async def test_get_shared_preview_image_stream(
 
     response = await client.get(f"/api/v1/quotes/share/{raw_token}/preview")
     assert response.status_code == 200
-    assert "image/png" in response.headers["content-type"]
+    # Stored previews are compressed to WebP
+    assert "image/webp" in response.headers["content-type"]
     assert "public, max-age=" in response.headers["cache-control"]
     assert len(response.content) > 0
 

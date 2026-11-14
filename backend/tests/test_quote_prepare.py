@@ -116,8 +116,11 @@ async def test_quote_prepare_success(
     preview_key = db_quote.preview_image_key
     assert preview_key in fake_r2_storage.objects
     uploaded_bytes, content_type, _ = fake_r2_storage.objects[preview_key]
-    assert content_type == "image/png"
-    assert len(uploaded_bytes) == len(preview_bytes)
+    # Preview is re-encoded as WebP within the configured size limit
+    assert preview_key.endswith(".webp")
+    assert content_type == "image/webp"
+    assert uploaded_bytes[:4] == b"RIFF" and uploaded_bytes[8:12] == b"WEBP"
+    assert len(uploaded_bytes) <= 1_000_000
 
 
 @pytest.mark.asyncio

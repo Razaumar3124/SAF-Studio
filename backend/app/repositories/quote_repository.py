@@ -46,7 +46,18 @@ class QuoteRepository:
                 [("status", ASCENDING)],
                 name="idx_quotes_status",
             )
-            # 5. MongoDB TTL index for automated expiry cleanup
+            # 5. Preview key lookup (storage cleanup checks whether a preview is referenced)
+            await self.collection.create_index(
+                [("preview_image_key", ASCENDING)],
+                name="idx_quotes_preview_key",
+            )
+            # 6. Design reference lookup (soft-deleted designs referenced by quotes are kept)
+            await self.collection.create_index(
+                [("design_id", ASCENDING)],
+                name="idx_quotes_design_id",
+                sparse=True,
+            )
+            # 7. MongoDB TTL index for automated expiry cleanup
             await self.collection.create_index(
                 [("expires_at", ASCENDING)],
                 expireAfterSeconds=0,
@@ -115,6 +126,15 @@ class QuoteRepository:
         )
         docs = await cursor.to_list(length=limit)
         return [QuoteInDB(**d) for d in docs]
+
+    async def exists_with_preview_key(self, preview_key: str) -> bool:
+        """Whether any quote still references this R2 preview object."""
+        doc = await self.collection.find_one({"preview_image_key": preview_key}, {"_id": 1})
+        return doc is not None
+
+    async def exists_for_design(self, design_id: str) -> bool:
+        """Whether any quote references this design."""
+        return await self.collection.find_one({"design_id": str(design_id)}, {"_id": 1}) is not None
 
     async def delete(self, quote_id: str) -> bool:
         """Delete quote document."""

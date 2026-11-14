@@ -1,21 +1,32 @@
+import asyncio
 import logging
 from typing import Any
 
 import httpx
 
 from app.core.config import get_settings
-from app.core.exceptions import AppException
+from app.core.exceptions import AppException, EmailQuotaExceededException
 
 logger = logging.getLogger("saf_studio.email")
 
 
+RESEND_EMAILS_URL = "https://api.resend.com/emails"
+# Resend allows 10 requests/second per team; wait at most this long before one retry.
+_MAX_RATE_LIMIT_WAIT_SECONDS = 2.0
+
+
 class EmailDeliveryException(AppException):
-    """Raised when transactional email dispatch fails."""
+    """Raised when transactional email dispatch fails.
+
+    `may_have_been_sent` is True when the provider might have accepted the email anyway
+    (e.g. the response timed out after the request was sent); quota is then not refunded.
+    """
 
     def __init__(
         self,
         message: str = "Unable to deliver verification code. Please try again later.",
         issue: str = "Email provider delivery failure",
+        may_have_been_sent: bool = False,
     ):
         super().__init__(
             message=message,
@@ -23,6 +34,15 @@ class EmailDeliveryException(AppException):
             status_code=503,
             details=[{"field": "email", "issue": issue}],
         )
+        self.may_have_been_sent = may_have_been_sent
+
+
+def _retry_after_seconds(resp: httpx.Response) -> float:
+    try:
+        value = float(resp.headers.get("retry-after", "1"))
+    except ValueError:
+        value = 1.0
+    return min(max(value, 0.0), _MAX_RATE_LIMIT_WAIT_SECONDS)
 
 
 def render_otp_email_html(otp_code: str, expiry_minutes: int = 10) -> str:
@@ -132,6 +152,12 @@ Your account remains secure.
 """
 
 
+_TEST_MODE_MESSAGE = (
+    "Email delivery is in testing mode and can't reach this address yet. "
+    "Please contact us on WhatsApp for help resetting your password."
+)
+
+
 class EmailService:
     """Asynchronous transactional email service supporting Resend and Mock providers."""
 
@@ -181,22 +207,18 @@ class EmailService:
                     issue="Missing RESEND_API_KEY",
                 )
 
-            # Enforce Resend Testing Mode recipient restriction
+            # Enforce Resend Testing Mode recipient restriction (no API call, no quota used)
             if settings.RESEND_TEST_MODE:
                 allowed_recipient = (settings.RESEND_TEST_RECIPIENT or "").strip().lower()
                 norm_to_email = to_email.strip().lower()
                 if allowed_recipient and norm_to_email != allowed_recipient:
                     logger.warning(
-                        "Resend testing mode restriction blocked dispatch to '%s'. Only '%s' is permitted.",
-                        to_email,
-                        allowed_recipient,
+                        "Resend testing mode blocked dispatch to a non-test recipient. "
+                        "Verify a domain at resend.com/domains and set RESEND_TEST_MODE=false."
                     )
                     raise EmailDeliveryException(
-                        message=(
-                            f"In development testing mode, emails can only be sent to {allowed_recipient}. "
-                            "Please verify a custom domain at resend.com/domains to send to other recipients."
-                        ),
-                        issue=f"Recipient not allowed in Resend test mode (allowed: {allowed_recipient})",
+                        message=_TEST_MODE_MESSAGE,
+                        issue="Recipient not allowed in Resend test mode",
                     )
 
             payload = {
@@ -206,48 +228,56 @@ class EmailService:
                 "html": html_body,
                 "text": text_body,
             }
-
             headers = {
                 "Authorization": f"Bearer {settings.RESEND_API_KEY.strip()}",
                 "Content-Type": "application/json",
             }
 
-            try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    resp = await client.post(
-                        "https://api.resend.com/emails",
-                        json=payload,
-                        headers=headers,
-                    )
-
+            for attempt in range(2):
+                resp = await self._post_to_resend(payload, headers)
                 if resp.status_code in (200, 201):
-                    logger.info("Verification OTP email dispatched successfully via Resend to %s", to_email)
+                    logger.info("Verification OTP email dispatched successfully via Resend")
                     return True
 
-                # Parse Resend response safely without leaking credentials or raw payloads
-                error_message = "Failed to deliver verification code via email."
-                issue_summary = f"Resend HTTP {resp.status_code}"
+                resend_name, resend_msg = "", ""
                 try:
-                    resend_json = resp.json()
-                    resend_msg = resend_json.get("message", "")
-                    if resp.status_code == 403 and "testing emails" in resend_msg.lower():
-                        error_message = (
-                            f"Resend is in testing mode and can only deliver to the verified account owner "
-                            f"({settings.RESEND_TEST_RECIPIENT}). "
-                            "Please verify a custom domain at resend.com/domains to send to other recipients."
-                        )
-                        issue_summary = "Resend 403 testing recipient restriction"
-                    elif resp.status_code == 422:
-                        error_message = "Email delivery service rejected recipient address format."
-                        issue_summary = "Resend 422 validation error"
-                    elif resp.status_code == 429:
-                        error_message = "Email delivery rate limit reached. Please wait a moment and try again."
-                        issue_summary = "Resend 429 rate limit exceeded"
-                    elif resp.status_code == 401:
-                        error_message = "Email delivery service authentication error."
-                        issue_summary = "Resend 401 unauthorized"
+                    body = resp.json()
+                    resend_name = str(body.get("name", "")).lower()
+                    resend_msg = str(body.get("message", "")).lower()
                 except Exception:
                     pass
+
+                if resp.status_code == 429:
+                    is_quota = "quota" in resend_msg
+                    if "daily_quota" in resend_name or (is_quota and "daily" in resend_msg):
+                        logger.error("Resend reported the daily sending quota is exhausted")
+                        raise EmailQuotaExceededException(scope="day", retry_after=3600)
+                    if "monthly_quota" in resend_name or (is_quota and "monthly" in resend_msg):
+                        logger.error("Resend reported the monthly sending quota is exhausted")
+                        raise EmailQuotaExceededException(scope="month", retry_after=86400)
+                    if attempt == 0:
+                        # Per-second rate limit (10 req/s per team): wait briefly, retry once.
+                        await asyncio.sleep(_retry_after_seconds(resp))
+                        continue
+                    logger.error("Resend rate limit persisted after retry")
+                    raise EmailDeliveryException(
+                        message=(
+                            "Our email service is busy right now. Please try again in a minute."
+                        ),
+                        issue="Resend 429 rate limit exceeded",
+                    )
+
+                error_message = "Failed to deliver verification code via email."
+                issue_summary = f"Resend HTTP {resp.status_code}"
+                if resp.status_code == 403 and "testing emails" in resend_msg:
+                    error_message = _TEST_MODE_MESSAGE
+                    issue_summary = "Resend 403 testing recipient restriction"
+                elif resp.status_code == 422:
+                    error_message = "Email delivery service rejected recipient address format."
+                    issue_summary = "Resend 422 validation error"
+                elif resp.status_code == 401:
+                    error_message = "Email delivery service authentication error."
+                    issue_summary = "Resend 401 unauthorized"
 
                 logger.error(
                     "Resend API delivery rejected: status=%d issue=%s",
@@ -257,20 +287,9 @@ class EmailService:
                 raise EmailDeliveryException(
                     message=error_message,
                     issue=issue_summary,
+                    # 5xx: Resend may have accepted the email before failing
+                    may_have_been_sent=resp.status_code >= 500,
                 )
-
-            except httpx.TimeoutException as exc:
-                logger.error("Resend API timed out after 5.0 seconds")
-                raise EmailDeliveryException(
-                    message="Email delivery service timed out. Please try again.",
-                    issue="Resend timeout",
-                ) from exc
-            except httpx.RequestError as exc:
-                logger.error("Resend connection error: %s", exc)
-                raise EmailDeliveryException(
-                    message="Network error communicating with email provider.",
-                    issue="Connection error communicating with email provider",
-                ) from exc
 
         logger.error("Unknown EMAIL_PROVIDER: %s", settings.EMAIL_PROVIDER)
         raise EmailDeliveryException(
@@ -278,10 +297,35 @@ class EmailService:
             issue=f"Unknown provider '{settings.EMAIL_PROVIDER}'",
         )
 
-    async def check_health(self) -> dict[str, Any]:
-        """Verify transactional email provider status."""
-        import time
+    async def _post_to_resend(
+        self, payload: dict[str, Any], headers: dict[str, str]
+    ) -> httpx.Response:
+        """POST one email to Resend, mapping transport failures to EmailDeliveryException."""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                return await client.post(RESEND_EMAILS_URL, json=payload, headers=headers)
+        except httpx.TimeoutException as exc:
+            logger.error("Resend API timed out after 5.0 seconds")
+            raise EmailDeliveryException(
+                message="Email delivery service timed out. Please try again.",
+                issue="Resend timeout",
+                # A connect timeout means the request never reached Resend.
+                may_have_been_sent=not isinstance(exc, httpx.ConnectTimeout),
+            ) from exc
+        except httpx.RequestError as exc:
+            logger.error("Resend connection error: %s", type(exc).__name__)
+            raise EmailDeliveryException(
+                message="Network error communicating with email provider.",
+                issue="Connection error communicating with email provider",
+                may_have_been_sent=not isinstance(exc, httpx.ConnectError),
+            ) from exc
 
+    async def check_health(self) -> dict[str, Any]:
+        """Report email provider configuration.
+
+        Deliberately makes no network call: probing Resend would spend its per-second rate
+        limit on every health check, and send-only API keys cannot read account endpoints.
+        """
         settings = get_settings()
         if settings.EMAIL_PROVIDER == "mock":
             return {
@@ -292,48 +336,18 @@ class EmailService:
             }
 
         if settings.EMAIL_PROVIDER == "resend":
-            api_key = settings.RESEND_API_KEY.strip()
-            if not api_key:
+            if not settings.RESEND_API_KEY.strip():
                 return {
                     "status": "misconfigured",
                     "provider": "resend",
                     "from_email": settings.RESEND_FROM_EMAIL,
                     "issue": "RESEND_API_KEY is not set",
                 }
-
-            start = time.perf_counter()
-            try:
-                async with httpx.AsyncClient(timeout=3.0) as client:
-                    resp = await client.get(
-                        "https://api.resend.com/api-keys",
-                        headers={"Authorization": f"Bearer {api_key}"},
-                    )
-                latency = round((time.perf_counter() - start) * 1000, 2)
-                if resp.status_code == 200:
-                    health_info: dict[str, Any] = {
-                        "status": "ready",
-                        "provider": "resend",
-                        "from_email": settings.RESEND_FROM_EMAIL,
-                        "latency_ms": latency,
-                        "test_mode": settings.RESEND_TEST_MODE,
-                    }
-                    if settings.RESEND_TEST_MODE:
-                        health_info["test_recipient"] = settings.RESEND_TEST_RECIPIENT
-                    return health_info
-                return {
-                    "status": "degraded",
-                    "provider": "resend",
-                    "from_email": settings.RESEND_FROM_EMAIL,
-                    "issue": f"Resend API returned HTTP {resp.status_code}",
-                    "latency_ms": latency,
-                }
-            except Exception as exc:
-                return {
-                    "status": "unreachable",
-                    "provider": "resend",
-                    "from_email": settings.RESEND_FROM_EMAIL,
-                    "issue": str(exc),
-                }
+            return {
+                "status": "ready",
+                "provider": "resend",
+                "from_email": settings.RESEND_FROM_EMAIL,
+            }
 
         return {
             "status": "unknown_provider",

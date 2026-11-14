@@ -17,6 +17,7 @@ from app.api.dependencies import (
     get_r2_storage,
     get_session_repository,
     get_template_repository,
+    get_usage_repository,
     get_user_repository,
 )
 from app.core.config import Settings, get_settings
@@ -31,6 +32,7 @@ from tests.fakes import (
     FakeR2Storage,
     FakeSessionRepository,
     FakeTemplateRepository,
+    FakeUsageRepository,
     FakeUserRepository,
     populate_fake_catalog,
 )
@@ -110,6 +112,12 @@ def fake_r2_storage() -> FakeR2Storage:
     return FakeR2Storage()
 
 
+@pytest.fixture
+def fake_usage_repo() -> FakeUsageRepository:
+    """Isolated in-memory quota counters and storage ledger."""
+    return FakeUsageRepository()
+
+
 @pytest.fixture(autouse=True)
 def setup_default_catalogs(
     fake_catalog_repo: FakeCatalogRepository,
@@ -139,6 +147,7 @@ def app(
     fake_design_repo: FakeDesignRepository,
     fake_quote_repo: FakeQuoteRepository,
     fake_r2_storage: FakeR2Storage,
+    fake_usage_repo: FakeUsageRepository,
 ):
     """FastAPI test app instance with overridden dependencies."""
     application = create_application()
@@ -151,6 +160,7 @@ def app(
     application.dependency_overrides[get_design_repository] = lambda: fake_design_repo
     application.dependency_overrides[get_quote_repository] = lambda: fake_quote_repo
     application.dependency_overrides[get_r2_storage] = lambda: fake_r2_storage
+    application.dependency_overrides[get_usage_repository] = lambda: fake_usage_repo
     return application
 
 

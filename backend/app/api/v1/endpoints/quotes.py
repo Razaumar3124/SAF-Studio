@@ -31,8 +31,12 @@ from app.schemas.quote import (
     QuoteShareResponse,
 )
 from app.services.rate_limiter import rate_limiter
+from app.utils.uploads import read_upload_limited
 
 logger = logging.getLogger("saf_studio.quotes")
+
+QUOTE_PREVIEW_UPLOAD_MAX_BYTES = 15 * 1024 * 1024
+_EXTENSIONS = {"image/webp": "webp", "image/png": "png", "image/jpeg": "jpg"}
 
 router = APIRouter(prefix="/quotes", tags=["Quotes"])
 
@@ -106,7 +110,9 @@ async def prepare_quote(
         ) from exc
 
     # 3. Read image bytes
-    preview_bytes = await file.read()
+    preview_bytes = await read_upload_limited(
+        file, QUOTE_PREVIEW_UPLOAD_MAX_BYTES, "Preview image is larger than 15 MB limit."
+    )
 
     # 4. Process quote through quote service
     response = await quote_service.prepare_quote(
@@ -179,7 +185,10 @@ async def get_shared_quote_preview(
         media_type=content_type or quote.preview_image_content_type,
         headers={
             "Cache-Control": "public, max-age=86400",
-            "Content-Disposition": f'inline; filename="saf-quote-{quote.quote_reference}.png"',
+            "Content-Disposition": (
+                f'inline; filename="saf-quote-{quote.quote_reference}.'
+                f'{_EXTENSIONS.get(content_type or quote.preview_image_content_type, "png")}"'
+            ),
         },
     )
 

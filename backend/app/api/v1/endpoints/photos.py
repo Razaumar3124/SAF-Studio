@@ -12,10 +12,12 @@ from app.api.dependencies import (
     CurrentUserDep,
     OptionalCurrentUserDep,
     PhotoServiceDep,
+    SettingsDep,
 )
 from app.core.exceptions import ValidationException
 from app.schemas.common import ApiErrorResponse
 from app.schemas.photo import PhotosListResponse, PhotoUploadResponse
+from app.utils.uploads import read_upload_limited
 
 router = APIRouter(prefix="/photos", tags=["Photos"])
 
@@ -45,18 +47,24 @@ router = APIRouter(prefix="/photos", tags=["Photos"])
             "model": ApiErrorResponse,
             "description": "Cloudflare R2 or database unavailable",
         },
+        status.HTTP_507_INSUFFICIENT_STORAGE: {
+            "model": ApiErrorResponse,
+            "description": "Storage capacity or the user's photo library limit is reached",
+        },
     },
     summary="Upload and process an image",
     description=(
-        "Validates image format and magic bytes, auto-rotates via EXIF, "
-        "generates WebP previews and thumbnails, uploads to Cloudflare R2, "
-        "and saves metadata in MongoDB."
+        "Validates image format and magic bytes (up to 15 MB), auto-rotates via EXIF, "
+        "stores a compressed WebP master (at most 2 MB, metadata stripped) with WebP "
+        "previews and thumbnails in Cloudflare R2, and saves metadata in MongoDB. "
+        "Re-uploading identical bytes returns the existing photo."
     ),
 )
 async def upload_photo(
     request: Request,
     photo_service: PhotoServiceDep,
     current_user: CurrentUserDep,
+    settings: SettingsDep,
     file: UploadFile = File(description="Binary photograph (JPEG, PNG, or WebP)"),
 ) -> PhotoUploadResponse:
     """EP-PHOTO-01: User photograph upload."""
@@ -66,7 +74,12 @@ async def upload_photo(
             details=[{"field": "file", "issue": "Missing file payload"}],
         )
 
-    file_bytes = await file.read()
+    file_bytes = await read_upload_limited(
+        file,
+        settings.max_upload_bytes,
+        f"That photo is larger than {settings.PHOTO_MAX_UPLOAD_MB} MB. "
+        "Please choose a smaller file.",
+    )
     client_ip = request.client.host if request.client else None
 
     return await photo_service.upload_photo(

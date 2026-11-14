@@ -35,6 +35,10 @@ class PhotoInDB(BaseModel):
     aspect_ratio: float
     suggested_orientation: str
     visual_analysis: VisualAnalysis | None = None
+    # Storage accounting (absent on photos uploaded before compression was introduced)
+    content_hash: str | None = None
+    stored_bytes: int | None = None
+    variant_bytes: dict[str, int] | None = None  # {"master": n, "preview": n, "thumbnail": n}
     status: str = Field(default="ready")
     is_deleted: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

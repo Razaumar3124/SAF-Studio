@@ -219,7 +219,9 @@ export default function MemoryWallPage() {
   }
 
   const handleSave = (title: string) => {
-    const saved = savedDesignsStore.save(state, title)
+    const saved = savedDesignsStore.save(state, title, (message) =>
+      toast({ tone: 'error', message: `Saved on this device only. ${message}` }),
+    )
     dispatch({ type: 'design/rename', title })
     close()
     toast({

@@ -1,6 +1,9 @@
+import asyncio
 import logging
+import time
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,9 +20,39 @@ from app.repositories.photo_repository import PhotoRepository
 from app.repositories.quote_repository import QuoteRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.template_repository import TemplateRepository
+from app.repositories.usage_repository import UsageRepository
 from app.repositories.user_repository import UserRepository
+from app.services.storage_maintenance_service import StorageMaintenanceService
+from app.storage.r2_storage import R2Storage
 
 logger = logging.getLogger("saf_studio.app")
+
+
+async def _storage_maintenance_loop(interval_hours: int) -> None:
+    """Run storage cleanup/reconciliation periodically. With several workers, a counter acts
+    as a lock so only one of them runs each interval."""
+    interval = interval_hours * 3600
+    await asyncio.sleep(min(600, interval))  # let startup settle first
+    while True:
+        try:
+            db = mongo_manager.get_database()
+            usage_repo = UsageRepository(db)
+            slot = int(time.time() // interval)
+            lock_expires = datetime.now(UTC) + timedelta(seconds=2 * interval)
+            if await usage_repo.increment_counter(f"maintenance:{slot}", 1, lock_expires):
+                service = StorageMaintenanceService(
+                    usage_repo=usage_repo,
+                    r2_storage=R2Storage(),
+                    photo_repo=PhotoRepository(db),
+                    quote_repo=QuoteRepository(db),
+                    design_repo=DesignRepository(db),
+                )
+                await service.run(apply=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("Storage maintenance run failed: %s", exc)
+        await asyncio.sleep(interval)
 
 
 @asynccontextmanager
@@ -51,6 +84,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             photo_repo = PhotoRepository(mongo_manager.get_database())
             design_repo = DesignRepository(mongo_manager.get_database())
             quote_repo = QuoteRepository(mongo_manager.get_database())
+            usage_repo = UsageRepository(mongo_manager.get_database())
             await user_repo.create_indexes()
             await session_repo.create_indexes()
             await catalog_repo.create_indexes()
@@ -58,6 +92,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await photo_repo.create_indexes()
             await design_repo.create_indexes()
             await quote_repo.create_indexes()
+            await usage_repo.create_indexes()
             logger.info("MongoDB collection indexes verified")
         except Exception as exc:
             logger.warning(
@@ -65,7 +100,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 exc,
             )
 
+    maintenance_task: asyncio.Task | None = None
+    if settings.ENVIRONMENT != "test" and settings.STORAGE_MAINTENANCE_INTERVAL_HOURS > 0:
+        maintenance_task = asyncio.create_task(
+            _storage_maintenance_loop(settings.STORAGE_MAINTENANCE_INTERVAL_HOURS)
+        )
+
     yield
+
+    if maintenance_task is not None:
+        maintenance_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await maintenance_task
 
     # 3. Shutdown: Cleanly close MongoDB connection pool
     if settings.ENVIRONMENT != "test":

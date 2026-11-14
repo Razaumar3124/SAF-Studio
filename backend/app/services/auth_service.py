@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.exceptions import (
     AccountAlreadyExistsException,
     AccountDisabledException,
+    EmailQuotaExceededException,
     InvalidCredentialsException,
     InvalidTokenException,
     RateLimitExceededException,
@@ -37,7 +38,8 @@ from app.schemas.auth import (
     VerifyOtpResponse,
 )
 from app.schemas.user import UserOut
-from app.services.email_service import EmailService
+from app.services.email_quota_service import EmailQuotaService
+from app.services.email_service import EmailDeliveryException, EmailService
 from app.services.email_service import email_service as global_email_service
 from app.services.rate_limiter import rate_limiter
 from app.services.token_service import TokenService
@@ -53,11 +55,13 @@ class AuthService:
         user_repo: UserRepository,
         session_repo: SessionRepository,
         token_service: TokenService,
+        email_quota: EmailQuotaService,
         email_service: EmailService | None = None,
     ) -> None:
         self.user_repo = user_repo
         self.session_repo = session_repo
         self.token_service = token_service
+        self.email_quota = email_quota
         self.email_service = email_service or global_email_service
 
     async def register_user(
@@ -229,17 +233,29 @@ class AuthService:
                 f"Please wait {remaining} seconds before requesting another verification code."
             )
 
-        # 3. Lookup user; if active, generate OTP and dispatch email
+        # 3. Daily allowance per address (counted for every address, registered or not, so the
+        #    response never reveals whether an account exists), then the app-wide quota.
+        await self.email_quota.consume_recipient_allowance(req.email)
+        try:
+            await self.email_quota.ensure_available()
+        except EmailQuotaExceededException:
+            await self.email_quota.refund_recipient_allowance(req.email)
+            raise
+
+        # 4. Lookup user; if active, send the OTP first and persist it only once it was sent,
+        #    so a failed send never invalidates a code the user already holds.
         user = await self.user_repo.get_by_email(req.email)
         if user and user.is_active:
-            # Invalidate any prior active OTP challenge for this email
-            await self.session_repo.invalidate_active_otps(req.email)
-
             otp_code = generate_otp()
-            otp_hash = hash_otp(req.email, otp_code)
-            expires_at = now + timedelta(minutes=settings.EMAIL_OTP_EXPIRE_MINUTES)
-            resend_available_at = now + timedelta(seconds=settings.EMAIL_OTP_COOLDOWN_SECONDS)
+            await self._dispatch_otp_email(req.email, otp_code, settings.EMAIL_OTP_EXPIRE_MINUTES)
 
+            otp_hash = hash_otp(req.email, otp_code)
+            sent_at = datetime.now(UTC)
+            expires_at = sent_at + timedelta(minutes=settings.EMAIL_OTP_EXPIRE_MINUTES)
+            resend_available_at = sent_at + timedelta(seconds=settings.EMAIL_OTP_COOLDOWN_SECONDS)
+
+            # Invalidate any prior active OTP challenge for this email, then store the new one
+            await self.session_repo.invalidate_active_otps(req.email)
             otp_doc = PasswordResetInDB(
                 _id=str(ObjectId()),
                 user_id=user.id,
@@ -251,16 +267,9 @@ class AuthService:
                 resend_available_at=resend_available_at,
                 expires_at=expires_at,
                 used=False,
-                created_at=now,
+                created_at=sent_at,
             )
             await self.session_repo.create_password_reset(otp_doc)
-
-            # Dispatch branded email via EmailService
-            await self.email_service.send_otp_email(
-                to_email=req.email,
-                otp_code=otp_code,
-                expiry_minutes=settings.EMAIL_OTP_EXPIRE_MINUTES,
-            )
             logger.info("Password reset OTP generated and dispatched for user_id=%s", user.id)
 
         # Return non-enumerating generic response regardless of whether account exists
@@ -268,6 +277,27 @@ class AuthService:
             message="If an account is associated with this email, a verification code was sent.",
             cooldown_seconds=settings.EMAIL_OTP_COOLDOWN_SECONDS,
         )
+
+    async def _dispatch_otp_email(self, email: str, otp_code: str, expiry_minutes: int) -> None:
+        """Send the OTP within the email budget, refunding quota when nothing was sent."""
+        await self.email_quota.reserve_send()
+        try:
+            await self.email_service.send_otp_email(
+                to_email=email,
+                otp_code=otp_code,
+                expiry_minutes=expiry_minutes,
+            )
+        except EmailQuotaExceededException as exc:
+            # Resend says its quota is used up: stop calling it until the period resets.
+            await self.email_quota.mark_provider_exhausted(exc.scope)
+            await self.email_quota.refund_recipient_allowance(email)
+            await self.email_quota.ensure_available()  # raises with the exact reset time
+            raise
+        except EmailDeliveryException as exc:
+            if not exc.may_have_been_sent:
+                await self.email_quota.refund_send()
+                await self.email_quota.refund_recipient_allowance(email)
+            raise
 
     async def initiate_password_recovery(
         self,

@@ -1,7 +1,7 @@
 """Tests for Resend Testing Mode integration in SAF email verification flow.
 
 Verifies:
-1. Recipient restriction to abdurrazzakshaikh31@gmail.com during development.
+1. Recipient restriction to the configured test inbox during development.
 2. Graceful error handling for Resend API failures without leaking sensitive credentials.
 3. Configurable test mode flag enabling transition to custom domains.
 4. Complete OTP verification lifecycle.
@@ -27,13 +27,13 @@ def test_mode_settings() -> Settings:
         RESEND_API_KEY="re_test_dummy_key_not_real",
         RESEND_FROM_EMAIL="SAF Studio <onboarding@resend.dev>",
         RESEND_TEST_MODE=True,
-        RESEND_TEST_RECIPIENT="abdurrazzakshaikh31@gmail.com",
+        RESEND_TEST_RECIPIENT="studio.owner@example.com",
     )
 
 
 @pytest.mark.asyncio
 async def test_resend_testing_mode_permits_allowed_recipient(test_mode_settings: Settings):
-    """Resend testing mode allows delivery to abdurrazzakshaikh31@gmail.com."""
+    """Resend testing mode allows delivery to studio.owner@example.com."""
     service = EmailService()
 
     with patch("app.services.email_service.get_settings", return_value=test_mode_settings):
@@ -46,7 +46,7 @@ async def test_resend_testing_mode_permits_allowed_recipient(test_mode_settings:
             mock_post.return_value = mock_resp
 
             result = await service.send_otp_email(
-                to_email="abdurrazzakshaikh31@gmail.com",
+                to_email="studio.owner@example.com",
                 otp_code="123456",
             )
             assert result is True
@@ -55,13 +55,13 @@ async def test_resend_testing_mode_permits_allowed_recipient(test_mode_settings:
             # Verify payload used onboarding@resend.dev and allowed recipient
             sent_payload = mock_post.call_args[1]["json"]
             assert sent_payload["from"] == "SAF Studio <onboarding@resend.dev>"
-            assert sent_payload["to"] == ["abdurrazzakshaikh31@gmail.com"]
+            assert sent_payload["to"] == ["studio.owner@example.com"]
             assert "123456" in sent_payload["subject"]
 
 
 @pytest.mark.asyncio
 async def test_resend_testing_mode_case_insensitive_matching(test_mode_settings: Settings):
-    """Recipient matching is case-insensitive (e.g. AbdurrazzakShaikh31@gmail.com)."""
+    """Recipient matching is case-insensitive (e.g. Studio.Owner@example.com)."""
     service = EmailService()
 
     with patch("app.services.email_service.get_settings", return_value=test_mode_settings):
@@ -74,7 +74,7 @@ async def test_resend_testing_mode_case_insensitive_matching(test_mode_settings:
             mock_post.return_value = mock_resp
 
             result = await service.send_otp_email(
-                to_email="AbdurrazzakShaikh31@GMAIL.COM",
+                to_email="Studio.Owner@EXAMPLE.COM",
                 otp_code="654321",
             )
             assert result is True
@@ -96,11 +96,13 @@ async def test_resend_testing_mode_blocks_unauthorized_recipient(test_mode_setti
             # External API must NOT be called
             assert not mock_post.called
 
-            # Error message must give clean, helpful guidance
+            # User-facing message must not leak the test inbox or admin setup instructions
             err_msg = str(exc_info.value.message)
-            assert "abdurrazzakshaikh31@gmail.com" in err_msg
-            assert "resend.com/domains" in err_msg
+            assert "testing mode" in err_msg.lower()
+            assert "studio.owner@example.com" not in err_msg
+            assert "resend.com" not in err_msg
             assert exc_info.value.code == "EMAIL_DELIVERY_FAILED"
+            assert exc_info.value.may_have_been_sent is False
 
 
 @pytest.mark.asyncio
@@ -144,7 +146,8 @@ async def test_resend_api_403_testing_error_handled_gracefully(test_mode_setting
         "statusCode": 403,
         "name": "validation_error",
         "message": (
-            "You can only send testing emails to your own email address (abdurrazzakshaikh31@gmail.com). "
+            "You can only send testing emails to your own email address "
+            "(studio.owner@example.com). "
             "To send emails to other recipients, please verify a domain at resend.com/domains, "
             "and change the `from` address to an email using this domain."
         ),
@@ -161,12 +164,12 @@ async def test_resend_api_403_testing_error_handled_gracefully(test_mode_setting
 
             with pytest.raises(EmailDeliveryException) as exc_info:
                 await service.send_otp_email(
-                    to_email="abdurrazzakshaikh31@gmail.com",
+                    to_email="studio.owner@example.com",
                     otp_code="123456",
                 )
 
             assert "testing mode" in exc_info.value.message.lower()
-            assert "resend.com/domains" in exc_info.value.message.lower()
+            assert "studio.owner@example.com" not in exc_info.value.message
             # Must not expose raw API key or internal structures
             assert "re_" not in exc_info.value.message
 
@@ -180,7 +183,7 @@ async def test_resend_api_timeout_handled_gracefully(test_mode_settings: Setting
         with patch("httpx.AsyncClient.post", side_effect=httpx.TimeoutException("Timeout")):
             with pytest.raises(EmailDeliveryException) as exc_info:
                 await service.send_otp_email(
-                    to_email="abdurrazzakshaikh31@gmail.com",
+                    to_email="studio.owner@example.com",
                     otp_code="123456",
                 )
 
@@ -190,7 +193,7 @@ async def test_resend_api_timeout_handled_gracefully(test_mode_settings: Setting
 @pytest.mark.asyncio
 async def test_otp_lifecycle_generation_hash_and_verification():
     """Verify OTP generation, HMAC-SHA256 hashing, and verification."""
-    email = "abdurrazzakshaikh31@gmail.com"
+    email = "studio.owner@example.com"
 
     # 1. Generation
     otp = generate_otp()

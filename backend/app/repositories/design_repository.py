@@ -281,3 +281,47 @@ class DesignRepository:
             results.append(DesignVersionInDB(**doc))
 
         return results
+
+    async def prune_versions(
+        self, design_id: str, keep_latest: int, current_version_id: str
+    ) -> int:
+        """Delete all but the newest `keep_latest` versions; never deletes the current one."""
+        if not ObjectId.is_valid(design_id) or keep_latest < 1:
+            return 0
+
+        cursor = (
+            self.versions.find({"design_id": ObjectId(design_id)}, {"version_number": 1})
+            .sort("version_number", DESCENDING)
+            .skip(keep_latest - 1)
+            .limit(1)
+        )
+        boundary = await cursor.to_list(length=1)
+        if not boundary:
+            return 0
+
+        query: dict[str, Any] = {
+            "design_id": ObjectId(design_id),
+            "version_number": {"$lt": boundary[0]["version_number"]},
+        }
+        if ObjectId.is_valid(str(current_version_id)):
+            query["_id"] = {"$ne": ObjectId(str(current_version_id))}
+        result = await self.versions.delete_many(query)
+        return result.deleted_count
+
+    async def list_soft_deleted_before(self, cutoff: datetime, limit: int = 200) -> list[str]:
+        """IDs of designs soft-deleted before `cutoff`."""
+        cursor = self.designs.find(
+            {"is_deleted": True, "deleted_at": {"$lt": cutoff}}, {"_id": 1}
+        ).limit(limit)
+        return [str(doc["_id"]) async for doc in cursor]
+
+    async def purge_design(self, design_id: str) -> bool:
+        """Permanently remove a soft-deleted design and all of its versions."""
+        if not ObjectId.is_valid(design_id):
+            return False
+        oid = ObjectId(design_id)
+        res = await self.designs.delete_one({"_id": oid, "is_deleted": True})
+        if res.deleted_count == 0:
+            return False
+        await self.versions.delete_many({"design_id": oid})
+        return True

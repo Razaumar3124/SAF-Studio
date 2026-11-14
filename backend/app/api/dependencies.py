@@ -23,11 +23,13 @@ from app.repositories.photo_repository import PhotoRepository
 from app.repositories.quote_repository import QuoteRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.template_repository import TemplateRepository
+from app.repositories.usage_repository import UsageRepository
 from app.repositories.user_repository import UserRepository
 from app.services.ai_usage_service import AIUsageService
 from app.services.auth_service import AuthService
 from app.services.catalog_service import CatalogService
 from app.services.design_service import DesignService
+from app.services.email_quota_service import EmailQuotaService
 from app.services.google_auth_service import GoogleAuthService
 from app.services.image_processing_service import ImageProcessingService
 from app.services.layout_service import LayoutService
@@ -36,6 +38,7 @@ from app.services.photo_service import PhotoService
 from app.services.quote_report_service import QuoteReportService
 from app.services.quote_service import QuoteService
 from app.services.redesign_service import RedesignService
+from app.services.storage_quota_service import StorageQuotaService
 from app.services.template_service import TemplateService
 from app.services.token_service import TokenService
 from app.services.whatsapp_service import WhatsAppService
@@ -57,6 +60,18 @@ async def get_session_repository(
     return SessionRepository(db)
 
 
+async def get_usage_repository(db: Annotated[AsyncDatabase, Depends(get_db)]) -> UsageRepository:
+    """Dependency for UsageRepository (quota counters and storage ledger)."""
+    return UsageRepository(db)
+
+
+async def get_email_quota_service(
+    usage_repo: Annotated[UsageRepository, Depends(get_usage_repository)],
+) -> EmailQuotaService:
+    """Dependency for EmailQuotaService."""
+    return EmailQuotaService(usage_repo)
+
+
 async def get_token_service(
     session_repo: Annotated[SessionRepository, Depends(get_session_repository)],
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
@@ -69,12 +84,14 @@ async def get_auth_service(
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
     session_repo: Annotated[SessionRepository, Depends(get_session_repository)],
     token_service: Annotated[TokenService, Depends(get_token_service)],
+    email_quota: Annotated[EmailQuotaService, Depends(get_email_quota_service)],
 ) -> AuthService:
     """Dependency for AuthService."""
     return AuthService(
         user_repo=user_repo,
         session_repo=session_repo,
         token_service=token_service,
+        email_quota=email_quota,
     )
 
 
@@ -197,16 +214,26 @@ async def get_r2_storage() -> R2Storage:
     return R2Storage()
 
 
+async def get_storage_quota_service(
+    usage_repo: Annotated[UsageRepository, Depends(get_usage_repository)],
+    r2_storage: Annotated[R2Storage, Depends(get_r2_storage)],
+) -> StorageQuotaService:
+    """Dependency for StorageQuotaService (R2 hard cap)."""
+    return StorageQuotaService(usage_repo=usage_repo, r2_storage=r2_storage)
+
+
 async def get_photo_service(
     photo_repo: Annotated[PhotoRepository, Depends(get_photo_repository)],
     image_service: Annotated[ImageProcessingService, Depends(get_image_processing_service)],
     r2_storage: Annotated[R2Storage, Depends(get_r2_storage)],
+    storage_quota: Annotated[StorageQuotaService, Depends(get_storage_quota_service)],
 ) -> PhotoService:
     """Dependency for PhotoService."""
     return PhotoService(
         photo_repo=photo_repo,
         image_service=image_service,
         r2_storage=r2_storage,
+        storage_quota=storage_quota,
     )
 
 
@@ -311,6 +338,7 @@ async def get_quote_service(
     quote_repo: Annotated[QuoteRepository, Depends(get_quote_repository)],
     photo_repo: Annotated[PhotoRepository, Depends(get_photo_repository)],
     r2_storage: Annotated[R2Storage, Depends(get_r2_storage)],
+    storage_quota: Annotated[StorageQuotaService, Depends(get_storage_quota_service)],
     whatsapp_service: Annotated[WhatsAppService, Depends(get_whatsapp_service)],
     report_service: Annotated[QuoteReportService, Depends(get_quote_report_service)],
 ) -> QuoteService:
@@ -319,6 +347,7 @@ async def get_quote_service(
         quote_repo=quote_repo,
         photo_repo=photo_repo,
         r2_storage=r2_storage,
+        storage_quota=storage_quota,
         whatsapp_service=whatsapp_service,
         report_service=report_service,
     )
